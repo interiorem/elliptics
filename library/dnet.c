@@ -433,12 +433,12 @@ static int dnet_iterator_server_send_complete(struct dnet_addr *addr, struct dne
 		err = cmd->status;
 
 		/*
-		 * Write CAS error is not a real 'error' in that regard, that we do not remove
-		 * local record, but also do not stop iterator.
-		 *
 		 * Setting @write_error forces iterator to stop.
+		 *
+		 * Stop iteration only if connection was failed on write
+		 * or no space left on remote backend.
 		 */
-		if (err && !send->write_error && (err != -EBADFD))
+		if (err && !send->write_error && (err == -ETIMEDOUT || err == -ENXIO || err == -ENOSPC))
 			send->write_error = err;
 
 		if (atomic_dec_and_test(&wp->refcnt)) {
