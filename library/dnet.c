@@ -438,7 +438,8 @@ static int dnet_iterator_server_send_complete(struct dnet_addr *addr, struct dne
 		 * Stop iteration only if connection was failed on write
 		 * or no space left on remote backend.
 		 */
-		if (err && !send->write_error && (err == -ETIMEDOUT || err == -ENXIO || err == -ENOSPC))
+		const int critical_error = err && (err == -ENXIO || err == -ENOSPC);
+		if (critical_error && !send->write_error)
 			send->write_error = err;
 
 		if (atomic_dec_and_test(&wp->refcnt)) {
@@ -537,7 +538,7 @@ err_out_send:
 					(unsigned long long)re->timestamp.tsec, (unsigned long long)re->timestamp.tnsec,
 					re->status, (unsigned long long)re->size,
 					(unsigned long long)re->iterated_keys, (unsigned long long)re->total_keys,
-					send->write_error,
+					err,
 					atomic_read(&send->bytes_pending), send->bytes_pending_max, new_pending);
 
 
@@ -683,6 +684,7 @@ int dnet_server_send_write(struct dnet_server_send_ctl *send,
 	struct dnet_io_control ctl;
 	struct dnet_session *s;
 	struct dnet_iterator_server_send_write_private *wp;
+	int i, backend_id;
 	int err;
 
 	dnet_server_send_get(send);
@@ -782,6 +784,25 @@ int dnet_server_send_write(struct dnet_server_send_ctl *send,
 			re->status, (unsigned long long)re->size,
 			(unsigned long long)re->iterated_keys, (unsigned long long)re->total_keys,
 			atomic_read(&send->bytes_pending), send->bytes_pending_max);
+
+	// check that source and destination backends are not the same
+	const int group_id = dnet_group_id_search_by_backend(n->st, send->backend_id);
+	if (group_id >= 0) {
+		for (i = 0; i < send->group_num; ++i) {
+			if (send->groups[i] == group_id) {
+				ctl.id.group_id = group_id;
+				const struct dnet_net_state *st = dnet_state_get_first_with_backend(n, &ctl.id, &backend_id);
+				if (st == n->st && backend_id == send->backend_id) {
+					dnet_log(n, DNET_LOG_ERROR, "%s: Interrupting iterator: source and destination backends are the same: "
+						 "backend_id: %d, group_id: %d",
+						 dnet_dump_id(&send->cmd.id), backend_id, group_id);
+					err = -ENXIO;
+					goto err_out_session_destroy;
+				}
+				break;
+			}
+		}
+	}
 
 	/*
 	 * After calling this function we do not own @wp anymore
