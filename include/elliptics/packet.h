@@ -1244,6 +1244,7 @@ struct dnet_server_send_request {
 	int		id_num;
 	int		group_num;
 	uint64_t	iflags;
+	uint64_t	reserved[10];
 };
 
 static inline void dnet_convert_server_send_request(struct dnet_server_send_request *req)
