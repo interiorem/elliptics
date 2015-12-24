@@ -79,10 +79,11 @@ static void ssend_configure(const std::string &path)
 
 static void ssend_test_insert_many_keys_old_ts(session &s, int num, const std::string &id_prefix, const std::string &data_prefix)
 {
+	std::vector<async_write_result> results;
 	s.set_trace_id(rand());
 	for (int i = 0; i < num; ++i) {
-		std::string id = id_prefix + lexical_cast(i);
-		std::string data = data_prefix + lexical_cast(i);
+		auto id = id_prefix + lexical_cast(i);
+		auto data = data_prefix + lexical_cast(i);
 
 		key k(id);
 		s.transform(k);
@@ -95,39 +96,59 @@ static void ssend_test_insert_many_keys_old_ts(session &s, int num, const std::s
 		dnet_current_time(&io.timestamp);
 		io.timestamp.tsec -= 1000;
 
-		ELLIPTICS_REQUIRE(res, s.write_data(io, data));
+		results.push_back(s.write_data(io, data));
+	}
+
+	for (auto &r : results) {
+		ELLIPTICS_REQUIRE(res, std::move(r));
 	}
 }
 
 static void ssend_test_insert_many_keys(session &s, int num, const std::string &id_prefix, const std::string &data_prefix)
 {
+	std::vector<async_write_result> results;
 	s.set_trace_id(rand());
 	for (int i = 0; i < num; ++i) {
-		std::string id = id_prefix + lexical_cast(i);
-		std::string data = data_prefix + lexical_cast(i);
+		auto id = id_prefix + lexical_cast(i);
+		auto data = data_prefix + lexical_cast(i);
 
-		ELLIPTICS_REQUIRE(res, s.write_data(id, data, 0));
+		results.push_back(s.write_data(id, data, 0));
+	}
+
+	for (auto &r : results) {
+		ELLIPTICS_REQUIRE(res, std::move(r));
 	}
 }
 
 static void ssend_test_read_many_keys(session &s, int num, const std::string &id_prefix, const std::string &data_prefix)
 {
+	std::vector<async_read_result> results;
 	s.set_trace_id(rand());
 	for (int i = 0; i < num; ++i) {
-		std::string id = id_prefix + lexical_cast(i);
-		std::string data = data_prefix + lexical_cast(i);
+		auto id = id_prefix + lexical_cast(i);
 
-		ELLIPTICS_COMPARE_REQUIRE(res, s.read_data(id, 0, 0), data);
+		results.push_back(s.read_data(id, 0, 0));
+	}
+
+	for (int i = 0; i < num; ++i) {
+		auto data = data_prefix + lexical_cast(i);
+
+		ELLIPTICS_COMPARE_REQUIRE(res, std::move(results[i]), data);
 	}
 }
 
 static void ssend_test_read_many_keys_error(session &s, int num, const std::string &id_prefix, int error)
 {
+	std::vector<async_read_result> results;
 	s.set_trace_id(rand());
 	for (int i = 0; i < num; ++i) {
-		std::string id = id_prefix + lexical_cast(i);
+		auto id = id_prefix + lexical_cast(i);
 
-		ELLIPTICS_REQUIRE_ERROR(res, s.read_data(id, 0, 0), error);
+		results.push_back(s.read_data(id, 0, 0));
+	}
+
+	for (auto &r : results) {
+		ELLIPTICS_REQUIRE_ERROR(res, std::move(r), error);
 	}
 }
 
@@ -231,14 +252,18 @@ static void ssend_test_server_send(session &s, int num, const std::string &id_pr
 	logger &log = s.get_logger();
 
 	s.set_trace_id(rand());
+	std::vector<async_write_result> write_results;
 	std::vector<std::string> keys;
 	for (int i = 0; i < num; ++i) {
-		std::string id = id_prefix + lexical_cast(i);
-		std::string data = data_prefix + lexical_cast(i);
+		auto id = id_prefix + lexical_cast(i);
+		auto data = data_prefix + lexical_cast(i);
 
-		ELLIPTICS_REQUIRE(res, s.write_data(id, data, 0));
-
+		write_results.push_back(s.write_data(id, data, 0));
 		keys.push_back(id);
+	}
+
+	for (auto &r : write_results) {
+		ELLIPTICS_REQUIRE(res, std::move(r));
 	}
 
 	BH_LOG(log, DNET_LOG_NOTICE, "%s: keys: %d, dst_groups: %s, starting copy",
@@ -365,7 +390,7 @@ static bool ssend_register_tests(test_suite *suite, node &n)
 				tests::create_session(n, {*g}, 0, 0), num, id_prefix, data_prefix);
 	}
 
-	// the fith stage - check that moving keys to itself doesn't permitted
+	// the fifth stage - check that moving keys to itself doesn't permitted
 	iflags = DNET_IFLAGS_MOVE;
 	id_prefix = "server_send self write test";
 	data_prefix = "server_send self write data";
