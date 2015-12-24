@@ -365,6 +365,13 @@ static bool ssend_register_tests(test_suite *suite, node &n)
 				tests::create_session(n, {*g}, 0, 0), num, id_prefix, data_prefix);
 	}
 
+	// the fith stage - check that moving keys to itself doesn't permitted
+	iflags = DNET_IFLAGS_MOVE;
+	id_prefix = "server_send self write test";
+	data_prefix = "server_send self write data";
+	ELLIPTICS_TEST_CASE(ssend_test_insert_many_keys, src, num, id_prefix, data_prefix);
+	ELLIPTICS_TEST_CASE(ssend_test_copy, src, ssend_src_groups, 0, iflags, 0);
+
 	return true;
 }
 
