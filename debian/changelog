@@ -1,3 +1,9 @@
+elliptics (2.26.10.3-6~srw5) unstable; urgency=medium
+
+  * srw: adopt changes from cocaine - link with cocaine-io-util
+
+ -- Anton Matveenko <antmat@yandex-team.ru>  Wed, 18 May 2016 18:36:51 +0300
+
 elliptics (2.26.10.3-6~srw4) unstable; urgency=medium
 
   * srw: add test for dispatch errors (unknown app, unknown event)
