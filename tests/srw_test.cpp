@@ -174,9 +174,9 @@ static nodes_data::ptr configure_test_setup_from_args(int argc, char *argv[])
 	return configure_test_setup(remotes, path);
 }
 
-///
-/// Checks retrieving info about application (via elliptics channel).
-///
+/*
+ * Checks retrieving info about application (via elliptics channel).
+ */
 static void test_info(session &client, const std::string &app_name)
 {
 	key key(std::string(__func__) + "info");
@@ -192,9 +192,9 @@ static void test_info(session &client, const std::string &app_name)
 	BOOST_REQUIRE_EQUAL(result[result.size() - 1], '}');
 }
 
-///
-/// Checks response on event dispatching errors.
-///
+/*
+ * Checks response on event dispatching errors.
+ */
 static void test_dispatch_errors(session &client, const std::string &app_name)
 {
 	// -2 on system `info` event to unknown app
@@ -235,11 +235,11 @@ static void test_dispatch_errors(session &client, const std::string &app_name)
 	}
 }
 
-///
-/// Checks worker response via worker's own elliptics client.
-/// (For some time it was the only working way to respond.)
-/// Original client is able to receive reply.
-///
+/*
+ * Checks worker response via worker's own elliptics client.
+ * (For some time it was the only working way to respond.)
+ * Original client is able to receive reply.
+ */
 static void test_echo_via_elliptics(session &client, const std::string &app_name, const std::string &data)
 {
 	key key_id(gen_random(8));
@@ -253,11 +253,11 @@ static void test_echo_via_elliptics(session &client, const std::string &app_name
 	BOOST_REQUIRE_EQUAL(result[0].context().data().to_string(), data);
 }
 
-///
-/// Checks worker response via cocaine response stream.
-/// From original client's point of view there should be no difference.
-/// Original client is able to receive reply.
-///
+/*
+ * Checks worker response via cocaine response stream.
+ * From original client's point of view there should be no difference.
+ * Original client is able to receive reply.
+ */
 static void test_echo_via_cocaine(session &client, const std::string &app_name, const std::string &data)
 {
 	key key_id(gen_random(8));
@@ -271,10 +271,10 @@ static void test_echo_via_cocaine(session &client, const std::string &app_name, 
 	BOOST_REQUIRE_EQUAL(result[0].context().data().to_string(), data);
 }
 
-///
-/// Checks `push` processing expectations.
-/// Original client receives nothing even from handlers that send replies.
-///
+/*
+ * Checks `push` processing expectations.
+ * Original client receives nothing even from handlers that send replies.
+ */
 static void test_push(session &client, const std::string &app_name, const std::string &data)
 {
 	auto origin = exec_context_data::create("dummy-event", "dummy-data");
@@ -302,11 +302,11 @@ static void test_push(session &client, const std::string &app_name, const std::s
 	}
 }
 
-///
-/// Checks `exec`->`push`(->`push`...) chaining.
-/// Original client is able to receive reply from the end of the chain
-/// (from it's point of view there should be no difference with test_echo_*).
-///
+/*
+ * Checks `exec`->`push`(->`push`...) chaining.
+ * Original client is able to receive reply from the end of the chain
+ * (from it's point of view there should be no difference with test_echo_*).
+ */
 static void test_chain_via_elliptics(session &client, const std::string &app_name, const std::string &start_event, const std::string &data)
 {
 	key key_id(__func__ + start_event);
@@ -318,15 +318,15 @@ static void test_chain_via_elliptics(session &client, const std::string &app_nam
 	BOOST_REQUIRE_EQUAL(async.get()[0].context().data().to_string(), data);
 }
 
-///
-/// This funky thread is needed to periodically 'ping' network connection to given node,
-/// since otherwise 3 timed out transaction in a row will force elliptics client to kill
-/// this connection and all subsequent transactions will be timed out prematurely.
-///
-/// State is only marked as 'stall' (and eventually will be killed) when it faces timeout transactions.
-/// Read transactions will be quickly completed (even with ENOENT error), which resets stall
-/// counter of the selected network connection.
-///
+/*
+ * This funky thread is needed to periodically 'ping' network connection to given node,
+ * since otherwise 3 timed out transaction in a row will force elliptics client to kill
+ * this connection and all subsequent transactions will be timed out prematurely.
+ *
+ * State is only marked as 'stall' (and eventually will be killed) when it faces timeout transactions.
+ * Read transactions will be quickly completed (even with ENOENT error), which resets stall
+ * counter of the selected network connection.
+ */
 class thread_watchdog {
 	public:
 		session client;
@@ -352,28 +352,28 @@ class thread_watchdog {
 		}
 };
 
-///
-/// Checks timeout mechanics on `exec` commands.
-///
-/// Runs @num exec transactions with random timeouts.
-///
-/// Timeouts must be set to less than 30 seconds, since 30 seconds is a magic number:
-/// first, because that's the number of seconds cocaine application sleeps in 'noreply' event,
-/// second, because cocaine sends heartbeats every 30 seconds (or at least complains that it didn't
-/// receive heartbeat after 30 seconds) and kills application.
-///
-/// Trying to set 'heartbeat-timeout' in profile to 60 seconds didn't help.
-/// See tests/srw_test.hpp file where we actually set 3 different timeouts to 60 seconds,
-/// but yet application is killed in 30 seconds.
-///TODO: check if this is still true after moving to cocaine v12.
-///
-/// Basic idea behind this test is following: we run multiple exec transactions with random timeouts,
-/// and all transactions must be timed out at most in 2 seconds after timeout expired. These 2 seconds
-/// happen because of checker thread which checks timer tree every second and check time (in seconds)
-/// must be greater than so called 'death' time.
-///
-/// For more details see dnet_trans_iterate_move_transaction() function.
-///
+/*
+ * Checks timeout mechanics on `exec` commands.
+ *
+ * Runs @num exec transactions with random timeouts.
+ *
+ * Timeouts must be set to less than 30 seconds, since 30 seconds is a magic number:
+ * first, because that's the number of seconds cocaine application sleeps in 'noreply' event,
+ * second, because cocaine sends heartbeats every 30 seconds (or at least complains that it didn't
+ * receive heartbeat after 30 seconds) and kills application.
+ *
+ * Trying to set 'heartbeat-timeout' in profile to 60 seconds didn't help.
+ * See tests/srw_test.hpp file where we actually set 3 different timeouts to 60 seconds,
+ * but yet application is killed in 30 seconds.
+ *TODO: check if this is still true after moving to cocaine v12.
+ *
+ * Basic idea behind this test is following: we run multiple exec transactions with random timeouts,
+ * and all transactions must be timed out at most in 2 seconds after timeout expired. These 2 seconds
+ * happen because of checker thread which checks timer tree every second and check time (in seconds)
+ * must be greater than so called 'death' time.
+ *
+ * For more details see dnet_trans_iterate_move_transaction() function.
+ */
 static void test_timeout(session &client, const std::string &app_name)
 {
 	key key_id = app_name;
@@ -420,9 +420,9 @@ static void test_timeout(session &client, const std::string &app_name)
 	}
 }
 
-///
-/// Checks serializability of data structures used in `localnode` service interface.
-///
+/*
+ * Checks serializability of data structures used in `localnode` service interface.
+ */
 template<class T>
 T pack_unpack(const T &v)
 {
@@ -460,9 +460,9 @@ static void test_localnode_data_serialization()
 	}
 }
 
-///
-/// Checks if `localnode` service methods are really working.
-///
+/*
+ * Checks if `localnode` service methods are really working.
+ */
 static void test_localnode(session &client, const std::vector<int> &groups, int locator_port)
 {
 	using cocaine::framework::service_manager_t;
@@ -534,9 +534,9 @@ static void test_localnode(session &client, const std::vector<int> &groups, int 
 }
 
 
-///
-/// Place to list available tests.
-///
+/*
+ * Place to list available tests.
+ */
 bool register_tests(const nodes_data *setup)
 {
 	// IMPORTANT: Any testcase that uses session object should be registered
