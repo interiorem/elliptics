@@ -502,25 +502,7 @@ static void test_localnode(session &client, const std::vector<int> &groups, int 
 		BOOST_CHECK_GT(path.size(), 0);
 	}
 
-	//FIXME: can't compare whole write_result and lookup_result because
-	// right now write.json_timestamp can be non-empty while lookup.json_timestamp is empty
-	// (lookup's behaviour is correct in this case, write's is not)
-	// There is an open issue on that matter:
-	//   ELL-654 : [SD] write с пустым json возвращает ненулевой json_timestamp
-	// BOOST_CHECK_EQUAL(write_result, lookup_result);
-#define CMP(x) BOOST_REQUIRE_EQUAL(std::get<0>(write_result).x, std::get<0>(lookup_result).x)
-	CMP(record_flags);
-	CMP(user_flags);
-	//CMP(json_timestamp);
-	CMP(json_offset);
-	CMP(json_size);
-	CMP(json_capacity);
-	CMP(data_timestamp);
-	CMP(data_offset);
-	CMP(data_size);
-#undef CMP
-	BOOST_REQUIRE_EQUAL(std::get<1>(write_result), std::get<1>(lookup_result));
-
+	BOOST_CHECK_EQUAL(write_result, lookup_result);
 
 	std::tuple<dnet_record_info, ioremap::elliptics::data_pointer> read_result;
 	{
@@ -529,6 +511,23 @@ static void test_localnode(session &client, const std::vector<int> &groups, int 
 		BOOST_REQUIRE_EQUAL(future.valid(), true);
 		BOOST_REQUIRE_NO_THROW(result = std::move(future.get()));
 	}
+
+	// BOOST_REQUIRE_EQUAL(std::get<0>(read_result), std::get<0>(write_result));
+    //FIXME: can't compare whole read_result to a write_result
+    // because right now read_result.data_offset is always 0 while write_result.data_offset
+    // carries proper data offset in a blob.
+    // There should be an issue on the matter.
+#define CMP(x) BOOST_REQUIRE_EQUAL(std::get<0>(write_result).x, std::get<0>(lookup_result).x)
+    CMP(record_flags);
+    CMP(user_flags);
+    CMP(json_timestamp);
+    CMP(json_offset);
+    CMP(json_size);
+    CMP(json_capacity);
+    CMP(data_timestamp);
+    // CMP(data_offset);
+    CMP(data_size);
+#undef CMP
 
 	BOOST_CHECK_EQUAL(std::get<1>(read_result).to_string(), value);
 }
