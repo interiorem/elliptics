@@ -26,30 +26,23 @@ struct exec_context_data
 
 		sph *raw_sph = p->srw_data.data<sph>();
 		if (other) {
-			memcpy(p->srw_data.data<sph>(), other->m_data->srw_data.data<sph>(), sizeof(sph));
+			memcpy(raw_sph, other->m_data->srw_data.data<sph>(), sizeof(sph));
 		} else {
 			memset(raw_sph, 0, sizeof(sph));
 			raw_sph->src_key = -1;
 		}
 
-		char *raw_event = reinterpret_cast<char *>(raw_sph + 1);
-		memcpy(raw_event, event.data(), event.size());
-		char *raw_data = raw_event + event.size();
-		memcpy(raw_data, data.data(), data.size());
+		auto raw_event = p->srw_data.skip<sph>();
+		memcpy(raw_event.data(), event.data(), event.size());
+
+		auto raw_data = raw_event.skip(event.size());
+		memcpy(raw_data.data(), data.data(), data.size());
 
 		raw_sph->event_size = event.size();
 		raw_sph->data_size = data.size();
 
 		p->event = event;
-		p->data = data_pointer::from_raw(raw_data, raw_sph->data_size);
-
-		// Current data_pointer creation is clear and is easily understandable,
-		// but the downside is that resulting `data` data_pointer has nothing
-		// in common with `srw_data` data_pointer, even if both are pointing
-		// to the same memory block.
-		// This alternative is a bit less clear but links both data_pointers together.
-		//TODO: switch to it?
-		// p->data = p->srw_data.skip(raw_data - reinterpret_cast<char*>(raw_sph));
+		p->data = std::move(raw_data);
 
 		return exec_context(p);
 	}
