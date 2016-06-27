@@ -63,8 +63,8 @@ std::string gen_random(const int len) {
 
 } // anonymous namespace
 
-// required for localnode_test
-//
+/* required for localnode_test
+ */
 
 inline bool operator==(const dnet_record_info &a, const dnet_record_info &b)
 {
@@ -110,8 +110,8 @@ inline std::ostream& operator<<(std::ostream& ostr, const std::tuple<dnet_record
 		;
 	return ostr;
 }
-inline std::ostream& operator<<(std::ostream& ostr, const std::tuple<dnet_record_info, ioremap::elliptics::data_pointer> &v)
-{
+inline std::ostream &operator<<(std::ostream &ostr,
+                                const std::tuple<dnet_record_info, ioremap::elliptics::data_pointer> &v) {
 	ostr << "{\n record_info=" << std::get<0>(v)
 		<< ",\n " << "value=" << std::get<1>(v).to_string()
 		<< "\n}"
@@ -219,11 +219,12 @@ static void test_dispatch_errors(session &client, const std::string &app_name)
 		BOOST_REQUIRE_EQUAL(async.error().code(), -2);
 	}
 
-	// -2 on unknown event to known app
-	//FIXME: right now error code is 1 because srw passes code received from the worker
-	// and this code is too uncertain now (also across different frameworks) to rely on it
-	// and to make a permanent translation into -2.
-	// Fix when cocaine will stabilize it.
+	/* -2 on unknown event to known app
+	 *FIXME: right now error code is 1 because srw passes code received from the worker
+	 * and this code is too uncertain now (also across different frameworks) to rely on it
+	 * and to make a permanent translation into -2.
+	 * Fix when cocaine will stabilize it.
+	 */
 	{
 		key key(std::string(__func__) + "unknown-event");
 		key.transform(client);
@@ -307,8 +308,8 @@ static void test_push(session &client, const std::string &app_name, const std::s
  * Original client is able to receive reply from the end of the chain
  * (from it's point of view there should be no difference with test_echo_*).
  */
-static void test_chain_via_elliptics(session &client, const std::string &app_name, const std::string &start_event, const std::string &data)
-{
+static void test_chain_via_elliptics(session &client, const std::string &app_name, const std::string &start_event,
+                                     const std::string &data) {
 	key key_id(__func__ + start_event);
 	key_id.transform(client);
 	dnet_id id = key_id.id();
@@ -394,7 +395,8 @@ static void test_timeout(session &client, const std::string &app_name)
 		int timeout = rand() % 20 + 1;
 		client.set_timeout(timeout);
 
-		results.emplace_back(std::make_pair(timeout, client.exec(&id, app_name + "@noreply-30seconds-wait", "some data")));
+		results.emplace_back(
+		    std::make_pair(timeout, client.exec(&id, app_name + "@noreply-30seconds-wait", "some data")));
 	}
 
 
@@ -512,21 +514,20 @@ static void test_localnode(session &client, const std::vector<int> &groups, int 
 		BOOST_REQUIRE_NO_THROW(result = std::move(future.get()));
 	}
 
-	// BOOST_REQUIRE_EQUAL(std::get<0>(read_result), std::get<0>(write_result));
-    //FIXME: can't compare whole read_result to a write_result
-    // because right now read_result.data_offset is always 0 while write_result.data_offset
-    // carries proper data offset in a blob.
-    // There should be an issue on the matter.
+	/* read_result and write_result can't be compared byte-to-byte because
+	 * read_result.data_offset is always 0 while write_result.data_offset
+	 * carries proper data offset in a blob.
+	 */
 #define CMP(x) BOOST_REQUIRE_EQUAL(std::get<0>(write_result).x, std::get<0>(lookup_result).x)
-    CMP(record_flags);
-    CMP(user_flags);
-    CMP(json_timestamp);
-    CMP(json_offset);
-    CMP(json_size);
-    CMP(json_capacity);
-    CMP(data_timestamp);
-    // CMP(data_offset);
-    CMP(data_size);
+	CMP(record_flags);
+	CMP(user_flags);
+	CMP(json_timestamp);
+	CMP(json_offset);
+	CMP(json_size);
+	CMP(json_capacity);
+	CMP(data_timestamp);
+	// CMP(data_offset);
+	CMP(data_size);
 #undef CMP
 
 	BOOST_CHECK_EQUAL(std::get<1>(read_result).to_string(), value);
@@ -538,16 +539,18 @@ static void test_localnode(session &client, const std::vector<int> &groups, int 
  */
 bool register_tests(const nodes_data *setup)
 {
-	// IMPORTANT: Any testcase that uses session object should be registered
-	// with ELLIPTICS_TEST_CASE macro using session object exactly as a second argument --
-	// -- there is special variant of tests::make() in test_object.hpp,
-	// which is specifically tailored for test cases with session.
+	/* IMPORTANT: Any testcase that uses session object should be registered
+	 * with ELLIPTICS_TEST_CASE macro using session object exactly as a second argument --
+	 * -- there is special variant of tests::make() in test_object.hpp,
+	 * which is specifically tailored for test cases with session.
+	 */
 
 	const std::string app = application_name();
 	auto n = setup->node->get_native();
 
-	/// prerequisite: launch and init test application
-	///TODO: turn them collectively to fixture
+	/* prerequisite: launch and init test application
+	 *TODO: turn them collectively to fixture
+	 */
 	ELLIPTICS_TEST_CASE(upload_application, setup->nodes[0].locator_port(), app, setup->directory.path());
 	for (const auto &i : setup->nodes) {
 		ELLIPTICS_TEST_CASE(start_application, i.locator_port(), app);
@@ -559,37 +562,42 @@ bool register_tests(const nodes_data *setup)
 
 	ELLIPTICS_TEST_CASE(test_dispatch_errors, use_session(n, { 1 }), app);
 
-	/// various ways to send a reply to an `exec` command
+	// various ways to send a reply to an `exec` command
 	ELLIPTICS_TEST_CASE(test_echo_via_elliptics, use_session(n, { 1 }), app, "some-data");
 	ELLIPTICS_TEST_CASE(test_echo_via_elliptics, use_session(n, { 1 }), app, "some-data and long-data.. like this");
 	ELLIPTICS_TEST_CASE(test_echo_via_cocaine, use_session(n, { 1 }), app, "some-data");
 	ELLIPTICS_TEST_CASE(test_echo_via_cocaine, use_session(n, { 1 }), app, "some-data and long-data.. like this");
 
-	/// single `push` command does not expect reply at all
+	// single `push` command does not expect reply at all
 	ELLIPTICS_TEST_CASE(test_push, use_session(n, { 1 }), app, "some-data");
 
-	//FIXME: change tests accordingly: empty reply is a special case now
-	// (apps can't return empty data and get away with it)
-	// ELLIPTICS_TEST_CASE(test_echo_via_elliptics, use_session(n, { 1 }), app, "");
-	// ELLIPTICS_TEST_CASE(test_echo_via_cocaine, use_session(n, { 1 }), app, "");
-	// ELLIPTICS_TEST_CASE(test_push, use_session(n, { 1 }), app, "");
+	/*FIXME: change tests accordingly: empty reply is a special case now
+	 * (apps can't return empty data and get away with it)
+	 * ELLIPTICS_TEST_CASE(test_echo_via_elliptics, use_session(n, { 1 }), app, "");
+	 * ELLIPTICS_TEST_CASE(test_echo_via_cocaine, use_session(n, { 1 }), app, "");
+	 * ELLIPTICS_TEST_CASE(test_push, use_session(n, { 1 }), app, "");
+	 */
 
-	/// `exec`/`push` chains
-	ELLIPTICS_TEST_CASE(test_chain_via_elliptics, use_session(n, { 1 }), app, "2-step-chain-via-elliptics", "some-data");
-	ELLIPTICS_TEST_CASE(test_chain_via_elliptics, use_session(n, { 1 }), app, "3-step-chain-via-elliptics", "some-data");
-	ELLIPTICS_TEST_CASE(test_chain_via_elliptics, use_session(n, { 1 }), app, "4-step-chain-via-elliptics", "some-data");
+	// `exec`/`push` chains
+	ELLIPTICS_TEST_CASE(test_chain_via_elliptics, use_session(n, {1}), app, "2-step-chain-via-elliptics",
+	                    "some-data");
+	ELLIPTICS_TEST_CASE(test_chain_via_elliptics, use_session(n, {1}), app, "3-step-chain-via-elliptics",
+	                    "some-data");
+	ELLIPTICS_TEST_CASE(test_chain_via_elliptics, use_session(n, {1}), app, "4-step-chain-via-elliptics",
+	                    "some-data");
 
-	/// timeout mechanics on `exec` commands (long test -- at least 30 seconds long)
+	// timeout mechanics on `exec` commands (long test -- at least 30 seconds long)
 	ELLIPTICS_TEST_CASE(test_timeout, use_session(n, { 1 }), app);
 
-	/// continuous load handles properly
-	//TODO: micro stress test similar to timeout test:
-	// - send vast stream of commands, big enough to affect concurrency rate
-	//   and number of spawned workers;
-	// - wait for completion;
-	// - check app info if load stat returned to zero
+	/* continuous load handles properly
+	 *TODO: micro stress test similar to timeout test:
+	 * - send vast stream of commands, big enough to affect concurrency rate
+	 *   and number of spawned workers;
+	 * - wait for completion;
+	 * - check app info if load stat returned to zero
+	 */
 
-	/// localnode service
+	// localnode service
 	// * data structures
 	ELLIPTICS_TEST_CASE_NOARGS(test_localnode_data_serialization);
 	// * methods (first using matching group_id, then empty group list)
@@ -602,16 +610,17 @@ bool register_tests(const nodes_data *setup)
 } // namespace tests
 
 
-//
-// Common test initialization routine.
-//
+/*
+ * Common test initialization routine.
+ */
 using namespace tests;
 using namespace boost::unit_test;
 
-//FIXME: forced to use global variable and plain function wrapper
-// because of the way how init_test_main works in boost.test,
-// introducing a global fixture would be a proper way to handle
-// global test setup
+/*FIXME: forced to use global variable and plain function wrapper
+ * because of the way how init_test_main works in boost.test,
+ * introducing a global fixture would be a proper way to handle
+ * global test setup
+ */
 namespace {
 
 std::shared_ptr<nodes_data> setup;
