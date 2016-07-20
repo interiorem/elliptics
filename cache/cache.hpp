@@ -24,11 +24,7 @@
 #include <cstdio>
 #include <unordered_map>
 #include <limits>
-#if __GNUC__ == 4 && __GNUC_MINOR__ < 5
-#  include <cstdatomic>
-#else
-#  include <atomic>
-#endif
+#include <atomic>
 
 #include <boost/intrusive/list.hpp>
 
@@ -46,35 +42,16 @@
 
 namespace ioremap { namespace cache {
 
-class raw_data_t {
-public:
-	raw_data_t(const char *data, size_t size) {
-		m_data.reserve(size);
-		m_data.insert(m_data.begin(), data, data + size);
-	}
-
-	std::vector<char> &data(void) {
-		return m_data;
-	}
-
-	size_t size(void) {
-		return m_data.size();
-	}
-
-private:
-	std::vector<char> m_data;
-};
-
 struct data_lru_tag_t;
 typedef boost::intrusive::list_base_hook<boost::intrusive::tag<data_lru_tag_t>,
-boost::intrusive::link_mode<boost::intrusive::safe_link>, boost::intrusive::optimize_size<true>
-> lru_list_base_hook_t;
+                                         boost::intrusive::link_mode<boost::intrusive::safe_link>,
+                                         boost::intrusive::optimize_size<true>>
+    lru_list_base_hook_t;
 
 class data_t;
 
 template<>
-struct treap_node_traits<data_t>
-{
+struct treap_node_traits<data_t> {
 	typedef const uint8_t* key_type;
 	typedef size_t priority_type;
 };
@@ -87,25 +64,41 @@ public:
 		ERASE_PHASE,
 	};
 
-	data_t(const unsigned char *id) :
-		m_lifetime(0), m_synctime(0), m_user_flags(0),
-		m_remove_from_disk(false), m_remove_from_cache(false),
-		m_only_append(false), m_removed_from_page(true), m_sync_state(sync_state_t::NOT_SYNCING) {
+	data_t(const unsigned char *id)
+	: m_lifetime(0)
+	, m_synctime(0)
+	, m_user_flags(0)
+	, m_remove_from_disk(false)
+	, m_remove_from_cache(false)
+	, m_only_append(false)
+	, m_removed_from_page(true)
+	, m_sync_state(sync_state_t::NOT_SYNCING)
+	, m_json()
+	{
 		memcpy(m_id.id, id, DNET_ID_SIZE);
 		dnet_empty_time(&m_timestamp);
+		dnet_empty_time(&m_json_timestamp);
 	}
 
-	data_t(const unsigned char *id, size_t lifetime, const char *data, size_t size, bool remove_from_disk) :
-		m_lifetime(0), m_synctime(0), m_user_flags(0),
-		m_remove_from_disk(remove_from_disk), m_remove_from_cache(false),
-		m_only_append(false), m_removed_from_page(true), m_sync_state(sync_state_t::NOT_SYNCING) {
+	data_t(const unsigned char *id, size_t lifetime, const char *data, size_t size, bool remove_from_disk)
+	: m_lifetime(0)
+	, m_synctime(0)
+	, m_user_flags(0)
+	, m_remove_from_disk(remove_from_disk)
+	, m_remove_from_cache(false)
+	, m_only_append(false)
+	, m_removed_from_page(true)
+	, m_sync_state(sync_state_t::NOT_SYNCING)
+	, m_json()
+	{
 		memcpy(m_id.id, id, DNET_ID_SIZE);
 		dnet_empty_time(&m_timestamp);
+		dnet_empty_time(&m_json_timestamp);
 
 		if (lifetime)
 			m_lifetime = lifetime + time(NULL);
 
-		m_data.reset(new raw_data_t(data, size));
+		m_data = std::make_shared<std::string>(data, size);
 	}
 
 	data_t(const data_t &other) = delete;
@@ -121,8 +114,12 @@ public:
 		return m_id;
 	}
 
-	std::shared_ptr<raw_data_t> data(void) const {
+	std::shared_ptr<std::string> data(void) const {
 		return m_data;
+	}
+
+	std::shared_ptr<std::string> json() const {
+		return m_json;
 	}
 
 	size_t lifetime(void) const {
@@ -143,16 +140,13 @@ public:
 
 	size_t eventtime() const {
 		size_t time = 0;
-		if (!time || (lifetime() && time > lifetime()))
-		{
+		if (!time || (lifetime() && time > lifetime())) {
 			time = lifetime();
 		}
-		if (!time || (synctime() && time > synctime()))
-		{
+		if (!time || (synctime() && time > synctime())) {
 			time = synctime();
 		}
-		if (!time)
-		{
+		if (!time) {
 			time = std::numeric_limits<size_t>::max();
 		}
 		return time;
@@ -180,6 +174,14 @@ public:
 
 	void set_timestamp(const dnet_time &timestamp) {
 		m_timestamp = timestamp;
+	}
+
+	const dnet_time &json_timestamp() const {
+		return m_json_timestamp;
+	}
+
+	void set_json_timestamp(const dnet_time &timestamp) {
+		m_json_timestamp = timestamp;
 	}
 
 	uint64_t user_flags() const {
@@ -239,11 +241,12 @@ public:
 	}
 
 	size_t overhead_size(void) const {
-		return sizeof(*this) + sizeof(*m_data);
+		return sizeof(*this) + sizeof(*m_data) + sizeof(*m_json);
 	}
 
 	size_t capacity(void) const {
-		return m_data->data().capacity();
+		return (m_data ? m_data->capacity() : 0) +
+		       (m_json ? m_json->capacity() : 0);
 	}
 
 	friend bool operator< (const data_t &a, const data_t &b) {
@@ -290,6 +293,7 @@ private:
 	size_t m_lifetime;
 	size_t m_synctime;
 	dnet_time m_timestamp;
+	dnet_time m_json_timestamp;
 	uint64_t m_user_flags;
 	bool m_remove_from_disk;
 	bool m_remove_from_cache;
@@ -298,7 +302,8 @@ private:
 	sync_state_t m_sync_state;
 	char m_cache_page_number;
 	struct dnet_raw_id m_id;
-	std::shared_ptr<raw_data_t> m_data;
+	std::shared_ptr<std::string> m_data;
+	std::shared_ptr<std::string> m_json;
 };
 
 struct record_info {
@@ -318,7 +323,7 @@ struct record_info {
 	bool is_synced;
 	bool only_append;
 	dnet_id id;
-	std::vector<char> data;
+	std::string data;
 	uint64_t user_flags;
 	dnet_time timestamp;
 };
@@ -341,9 +346,13 @@ struct eventtime_less {
 typedef treap<data_t> treap_t;
 
 struct cache_stats {
-	cache_stats():
-		number_of_objects(0), size_of_objects(0),
-		number_of_objects_marked_for_deletion(0), size_of_objects_marked_for_deletion(0) {}
+	cache_stats()
+	: number_of_objects(0)
+	, size_of_objects(0)
+	, number_of_objects_marked_for_deletion(0)
+	, size_of_objects_marked_for_deletion(0)
+	{
+	}
 
 	std::size_t number_of_objects;
 	std::size_t size_of_objects;
@@ -377,60 +386,62 @@ struct cache_stats {
 class slru_cache_t;
 
 class cache_manager {
-	public:
-		cache_manager(dnet_backend_io *backend, dnet_node *n, const cache_config &config);
+public:
+	cache_manager(dnet_backend_io *backend, dnet_node *n, const cache_config &config);
 
-		~cache_manager();
+	~cache_manager();
 
-		int write(const unsigned char *id, dnet_net_state *st, dnet_cmd *cmd, dnet_io_attr *io, const char *data);
+	int write(const unsigned char *id, dnet_net_state *st, dnet_cmd *cmd, dnet_io_attr *io, const char *data);
 
-		std::shared_ptr<raw_data_t> read(const unsigned char *id, dnet_cmd *cmd, dnet_io_attr *io);
+	std::shared_ptr<std::string> read(const unsigned char *id, dnet_cmd *cmd, dnet_io_attr *io);
 
-		int remove(const unsigned char *id, dnet_io_attr *io);
+	int remove(const unsigned char *id, dnet_io_attr *io);
 
-		int lookup(const unsigned char *id, dnet_net_state *st, dnet_cmd *cmd);
+	int lookup(const unsigned char *id, dnet_net_state *st, dnet_cmd *cmd);
 
-		int indexes_find(dnet_cmd *cmd, dnet_indexes_request *request);
+	int indexes_find(dnet_cmd *cmd, dnet_indexes_request *request);
 
-		int indexes_update(dnet_cmd *cmd, dnet_indexes_request *request);
+	int indexes_update(dnet_cmd *cmd, dnet_indexes_request *request);
 
-		int indexes_internal(dnet_cmd *cmd, dnet_indexes_request *request);
+	int indexes_internal(dnet_cmd *cmd, dnet_indexes_request *request);
 
-		void clear();
+	void clear();
 
-		size_t cache_size() const;
+	size_t cache_size() const;
 
-		size_t cache_pages_number() const;
+	size_t cache_pages_number() const;
 
-		cache_stats get_total_cache_stats() const;
+	cache_stats get_total_cache_stats() const;
 
-		std::vector<cache_stats> get_caches_stats() const;
+	std::vector<cache_stats> get_caches_stats() const;
 
-		rapidjson::Value& get_total_caches_size_stats_json(rapidjson::Value& stat_value, rapidjson::Document::AllocatorType &allocator) const;
+	rapidjson::Value &get_total_caches_size_stats_json(rapidjson::Value &stat_value,
+	                                                   rapidjson::Document::AllocatorType &allocator) const;
 
-		rapidjson::Value& get_total_caches_time_stats_json(rapidjson::Value& stat_value, rapidjson::Document::AllocatorType &allocator) const;
+	rapidjson::Value &get_total_caches_time_stats_json(rapidjson::Value &stat_value,
+	                                                   rapidjson::Document::AllocatorType &allocator) const;
 
-		rapidjson::Value& get_caches_size_stats_json(rapidjson::Value& stat_value, rapidjson::Document::AllocatorType &allocator) const;
+	rapidjson::Value &get_caches_size_stats_json(rapidjson::Value &stat_value,
+	                                             rapidjson::Document::AllocatorType &allocator) const;
 
-		rapidjson::Value& get_caches_time_stats_json(rapidjson::Value& stat_value, rapidjson::Document::AllocatorType &allocator) const;
+	rapidjson::Value &get_caches_time_stats_json(rapidjson::Value &stat_value,
+	                                             rapidjson::Document::AllocatorType &allocator) const;
 
-		std::string stat_json() const;
+	std::string stat_json() const;
 
-	private:
-		dnet_node *m_node;
-		std::vector<std::shared_ptr<slru_cache_t>> m_caches;
-		size_t m_max_cache_size;
-		size_t m_cache_pages_number;
+private:
+	dnet_node *m_node;
+	std::vector<std::shared_ptr<slru_cache_t>> m_caches;
+	size_t m_max_cache_size;
+	size_t m_cache_pages_number;
 
-		size_t idx(const unsigned char *id);
+	size_t idx(const unsigned char *id);
 };
 
-template <typename T>
-class elliptics_unique_lock
-{
+template <typename T> class elliptics_unique_lock {
 public:
-	elliptics_unique_lock(T &mutex, dnet_node *node, const char *format, ...) __attribute__ ((format(printf, 4, 5)))
-		: m_node(node)
+	elliptics_unique_lock(T &mutex, dnet_node *node, const char *format, ...) __attribute__((format(printf, 4, 5)))
+	: m_node(node)
 	{
 		va_list args;
 		va_start(args, format);
@@ -447,7 +458,8 @@ public:
 			level = DNET_LOG_ERROR;
 
 		if (m_timer.elapsed() > 0) {
-			dnet_log(m_node, level, "%s: cache lock: constructor: vatime: %ld, total: %lld ms", m_name, vatime, m_timer.elapsed());
+			dnet_log(m_node, level, "%s: cache lock: constructor: vatime: %ld, total: %lld ms", m_name,
+			         vatime, m_timer.elapsed());
 		}
 
 		m_timer.restart();
@@ -501,6 +513,6 @@ private:
 	elliptics_timer m_timer;
 };
 
-}}
+}} /* namespace ioremap::cache */
 
 #endif // CACHE_HPP
