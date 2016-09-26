@@ -390,7 +390,9 @@ static bool ssend_register_tests(test_suite *suite, node &n)
 				tests::create_session(n, {*g}, 0, 0), num, id_prefix, data_prefix);
 	}
 
-	// the fifth stage - check that moving keys to itself doesn't permitted
+	// the fifth stage - check that copy-iterator doesn't move keys to itself:
+	// write many keys, move them using @start_copy_iterator() method with destination groups
+	// equal to the source groups and check that no keys were moved
 	iflags = DNET_IFLAGS_MOVE;
 	id_prefix = "server_send self write test";
 	data_prefix = "server_send self write data";
