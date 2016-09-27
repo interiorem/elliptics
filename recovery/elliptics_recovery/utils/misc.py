@@ -293,13 +293,15 @@ class RemoveDirect(DirectOperation):
 
 
 class KeyInfo(object):
-    def __init__(self, address, group_id, timestamp, size, user_flags, flags):
+    def __init__(self, address, group_id, timestamp, size, user_flags, flags):#, data_offset, blob_id):
         self.address = address
         self.group_id = group_id
         self.timestamp = timestamp
         self.size = size
         self.user_flags = user_flags
         self.flags = flags
+        #self.data_offset = data_offset
+        #self.blob_id = blob_id
 
     def dump(self):
         return (

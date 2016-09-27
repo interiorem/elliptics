@@ -908,6 +908,8 @@ static iterator_callback make_iterator_server_send_callback(eblob_backend_config
 				info->ehdr.timestamp, // data timestamp
 				info->data_size, // data_size
 				0, // read_data_size
+				info->data_offset, // data_offset
+				static_cast<uint64_t>(info->fd) // blob_id
 			});
 		};
 
@@ -1079,7 +1081,9 @@ static iterator_callback make_iterator_network_callback(eblob_backend_config *c,
 
 			info->ehdr.timestamp, // data timestamp
 			info->data_size, // data_size
-			read_data_size // read_data_size
+			read_data_size, // read_data_size
+			info->data_offset, // data_offset
+			static_cast<uint64_t>(info->fd) // blob_id
 		});
 
 		if (st->__need_exit) {
@@ -1365,6 +1369,8 @@ int blob_send_new(struct eblob_backend_config *c, void *state, struct dnet_cmd *
 		dnet_time{0, 0}, // data_timestamp
 		0, // data_size
 		0, // read_data_size
+		0, // data_offset
+		0 // blob_id
 	};
 
 	auto send_fail_reply = [&] (int status) {
