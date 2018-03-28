@@ -93,7 +93,7 @@ class Monitor(object):
     Contains monitoring data and provides interface for manipulating it
     from detached threads/processes
     """
-    def __init__(self, ctx, port):
+    def __init__(self, ctx, port, filename='stats'):
         self.ctx = ctx
         self.port = port
         self.manager = Manager()
@@ -102,11 +102,11 @@ class Monitor(object):
         self.__shutdown_request = False
         self.__stats = Stats('monitor')
         if self.ctx.stat_format == STAT_TEXT:
-            self.stats_file = 'stats.txt'
+            self.stats_file = '{}.txt'.format(filename)
         elif self.ctx.stat_format == STAT_JSON:
-            self.stats_file = 'stats.json'
+            self.stats_file = '{}.json'.format(filename)
         else:
-            self.stats_file = 'stats'
+            self.stats_file = filename
         self.stats_file = os.path.join(ctx.tmp_dir, self.stats_file)
 
         self.d_thread = Thread(target=self.data_thread, name="MonitorDataThread")
