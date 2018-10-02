@@ -67,7 +67,7 @@ static nodes_data::ptr configure_test_setup(const std::string &path) {
 	return start_nodes(start_config);
 }
 
-/* The test validates doping request on server-side after 1 seconds by follow:
+/* The test validates dropping request on server-side after 1 seconds by follow:
  * * write test key
  * * set backend delay to 1,5 seconds to make the backend sleep 1,5 seconds before handling request
  * * sequentially sends 2 async read of written key commands with 5 seconds timeout:
@@ -115,6 +115,50 @@ static void test_queue_timeout(session &s, const nodes_data *setup) {
 	}
 }
 
+/* The test checks for error reply on expired request, so client could be informed on timeout earlier,
+ * not on session timeout.
+ */
+static void test_queue_ack_timeout(session &s, const nodes_data *setup) {
+	// check that test have only one node
+	BOOST_REQUIRE(setup->nodes.size() == 1);
+
+	// test key and data
+	std::string key = "queue timeout reply with timout test key";
+	std::string data = "queue timeout reply with timout test key";
+
+	// write test key/data
+	ELLIPTICS_REQUIRE(async_write, s.write_data(key, data, 0));
+
+	const auto &node = setup->nodes.front();
+	// sets 2 seconds delay to the only backend on the only node
+	constexpr uint64_t delay_ms = 2000;
+	s.set_delay(node.remote(), backend_id, delay_ms).get();
+
+	// sets 10 seconds session timeout - it should fit at least 2 x backend delay because
+	// if the second command won't be dropped due to queue timeout its handling time
+	// should be around 4 seconds (2 x backend delay).
+	constexpr auto session_timeout = 10;
+	s.set_timeout(session_timeout);
+	dnet_time start; dnet_current_time(&start);
+
+	// first lookup will delay after decoupling from queue for `delay_ms`.
+	auto async = s.lookup(key);
+	// second lookup command. It will be in io queue while the only io thread will sleep on backend delay.
+	auto async_timeouted = s.lookup(key);
+	{
+		ELLIPTICS_CHECK(res, std::move(async));
+	} {
+		// second lookup command should faile with timeout error due to message expiration.
+		ELLIPTICS_REQUIRE_ERROR(res, std::move(async_timeouted), -ETIMEDOUT);
+		const auto delta_sec = res.end_time().tsec - start.tsec;
+		// Warning: all timings comparsion is a "danger zone", as execution time could depends on many factors.
+		constexpr auto expected_to_elapsed_sec = delay_ms / 1000;
+		BOOST_REQUIRE_GE(delta_sec, expected_to_elapsed_sec);
+		BOOST_REQUIRE_LT(delta_sec, session_timeout / 2);
+	}
+}
+
+
 /* Idea is the same as @test_queue_timeout but it uses backend with overridden to 2 seconds queue timeout.
  * It consists of 2 parts:
  * * first part checks that overridden queue timeout is really overridden and
@@ -143,7 +187,7 @@ static void test_overridden_queue_timeout(session &s, const nodes_data *setup) {
 		// the second command shouldn't be dropped due to queue timeout and its handling time
 		// should be around 3 seconds (2 x backend delay).
 		s.set_timeout(5);
-		// first read command. It will hold the only io thread on 2,5 seconds backend delay.
+		// first read command. It will hold the only io thread on 1,5 seconds backend delay.
 		auto async = s.read_data(key, 0, 0);
 		// second read command. It will be in io queue while the only io thread will sleep on backend delay.
 		auto async2 = s.read_data(key, 0, 0);
@@ -188,6 +232,7 @@ static bool register_tests(const nodes_data *setup) {
 	auto n = setup->node->get_native();
 
 	ELLIPTICS_TEST_CASE(test_queue_timeout, use_session(n, { group }, 0, 0), setup);
+	ELLIPTICS_TEST_CASE(test_queue_ack_timeout, use_session(n, { group }, 0, 0), setup);
 	ELLIPTICS_TEST_CASE(test_overridden_queue_timeout,
 	                    use_session(n, {group_with_overridden_queue_timeout}, 0, 0),
 	                    setup);
