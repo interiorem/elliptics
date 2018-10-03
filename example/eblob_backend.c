@@ -65,6 +65,19 @@
 #error "EBLOB_ID_SIZE must be equal to DNET_ID_SIZE"
 #endif
 
+
+// Checks for broken headers signatures.
+#define CHECK_DC_HDR_SIGN(dc) (!(dc)->flags && (dc)->flags < 1<<9)
+#define CHECK_EXT_HDR_SIGN(ell) ( \
+	(ell)->version == 1 && \
+	!(ell)->__pad1[0] && !(ell)->__pad1[1] && !(ell)->__pad1[2] && \
+	(ell)->size && \
+	!(ell)->__pad2[0] && !(ell)->__pad2[1] && \
+	/* ts: 1483228800 - time, when bug was corrected  */ \
+	(ell)->timestamp.tsec <= 1483228800 \
+)
+
+
 static int eblob_read_params_compare(const void *p1, const void *p2)
 {
 	const struct eblob_read_params *r1 = p1;
@@ -82,6 +95,38 @@ static int eblob_read_params_compare(const void *p1, const void *p2)
 
 	return 0;
 }
+
+static inline int eblob_check_data_signature(int fd, size_t user_data_size, off_t user_data_offset)
+{
+	static const size_t stamp_size = sizeof(struct eblob_disk_control) + sizeof(struct dnet_ext_list_hdr);
+
+	int err = 0;
+	uint8_t raw_user_data[stamp_size];
+
+	if (fd < 0 || !user_data_size || !user_data_offset)
+		goto err_out_exit;
+
+	// TODO(eblob_check_data_signature): may be check some available bytes?
+	if (user_data_size < stamp_size)
+		goto err_out_exit;
+
+	err = dnet_read_ll(fd, (void *) raw_user_data, stamp_size, user_data_offset);
+	if (err)
+		goto err_out_exit;
+
+	// Both structs are packed, and seems that their combination haven't alignment issues,
+	// but things could change on headers format change.
+	const struct eblob_disk_control *const dc = (void *) raw_user_data;
+	const struct dnet_ext_list_hdr *const ehdr = (void *) (dc + 1);
+
+	if (CHECK_DC_HDR_SIGN(dc) && CHECK_EXT_HDR_SIGN(ehdr)) {
+		return -EILSEQ;
+	}
+
+err_out_exit:
+	return err;
+}
+
 
 /* Pre-callback that formats arguments and calls ictl->callback */
 static int blob_iterate_callback_common(struct eblob_disk_control *dc, int fd, uint64_t data_offset, void *priv, int no_meta) {
@@ -435,6 +480,10 @@ static int blob_read(struct eblob_backend_config *c, void *state, struct dnet_cm
 		size -= sizeof(ehdr) + ehdr.size + jhdr.capacity;
 		offset += sizeof(ehdr) + ehdr.size + jhdr.capacity;
 		record_offset += sizeof(ehdr) + ehdr.size + jhdr.capacity;
+
+		err = eblob_check_data_signature(wc.data_fd, size, offset);
+		if (err)
+			goto err_out_exit;
 	}
 
 	err = dnet_backend_check_get_size(io, &offset, &size);
@@ -589,6 +638,10 @@ static int blob_read_range_callback(struct eblob_range_request *req)
 
 			io.offset += sizeof(ehdr) + ehdr.size + jhdr.capacity;
 			io.size -= sizeof(ehdr) + ehdr.size + jhdr.capacity;
+
+			err = eblob_check_data_signature(wc.data_fd, io.size, io.offset);
+			if (err)
+				goto err_out_exit;
 		}
 
 		memcpy(io.id, req->record_key, DNET_ID_SIZE);
@@ -836,6 +889,10 @@ static int blob_file_info(struct eblob_backend_config *c, void *state, struct dn
 		size -= sizeof(ehdr) + ehdr.size + jhdr.capacity;
 		offset += sizeof(ehdr) + ehdr.size + jhdr.capacity;
 		record_offset += sizeof(ehdr) + ehdr.size + jhdr.capacity;
+
+		err = eblob_check_data_signature(fd, size, offset);
+		if (err)
+			goto err_out_exit;
 	}
 
 	if (size == 0) {
@@ -964,6 +1021,10 @@ static int eblob_backend_lookup(struct dnet_node *n, void *priv, struct dnet_io_
 
 	size -= sizeof(ehdr) + ehdr.size + jhdr.capacity;
 	offset += sizeof(ehdr) + ehdr.size + jhdr.capacity;
+
+	err = eblob_check_data_signature(wc.data_fd, size, offset);
+	if (err)
+		goto err_out_set_sizes;
 
 	err = 0;
 
@@ -1165,6 +1226,10 @@ static int blob_send(struct eblob_backend_config *cfg, void *state, struct dnet_
 			re.size -= sizeof(ehdr) + ehdr.size + jhdr.capacity;
 			data_offset += sizeof(ehdr) + ehdr.size + jhdr.capacity;
 			record_offset += sizeof(ehdr) + ehdr.size + jhdr.capacity;
+
+			err = eblob_check_data_signature(wc.data_fd, re.size, data_offset);
+			if (err)
+				goto err_out_send_fail_reply;
 		}
 
 		wc.offset = record_offset;
