@@ -18,6 +18,8 @@
 
 #include "bindings/cpp/functional_p.h"
 
+#include "bulk_remove_handler.h"
+
 namespace ioremap { namespace elliptics { namespace newapi {
 
 session::session(const node &n) : elliptics::session(n) {
@@ -99,11 +101,11 @@ private:
 	class inner_handler : public multigroup_handler<lookup_handler, lookup_result_entry> {
 	public:
 		inner_handler(const session &s,
-		              const async_lookup_result &result,
-		              std::vector<int> &&groups,
-		              const dnet_trans_control &control)
-		: parent_type(s, result, std::move(groups))
-		, m_control(control) {
+			const async_lookup_result &result,
+			std::vector<int> &&groups,
+			const dnet_trans_control &control)
+			: parent_type(s, result, std::move(groups))
+			, m_control(control) {
 		}
 
 	protected:
@@ -118,34 +120,34 @@ private:
 
 public:
 	explicit lookup_handler(const session &session, const async_lookup_result &result, const key &key)
-	: m_key(key)
-	, m_session(session.clean_clone())
-	, m_handler(result)
-	, m_log(session.get_logger()) {
+		: m_key(key)
+		, m_session(session.clean_clone())
+		, m_handler(result)
+		, m_log(session.get_logger()) {
 		m_session.set_checker(session.get_checker());
 		m_handler.set_total(1);
 	}
 
 	void start(std::vector<int> &&groups, const transport_control &control) {
 		DNET_LOG_INFO(m_log, "{}: {}: started: groups: {}, cflags: {}", dnet_dump_id_str(m_key.raw_id().id),
-		              dnet_cmd_string(control.get_native().cmd), groups,
-		              dnet_flags_dump_cflags(control.get_native().cflags));
+			dnet_cmd_string(control.get_native().cmd), groups,
+			dnet_flags_dump_cflags(control.get_native().cflags));
 
 		m_context.reset(new dnet_access_context(m_session.get_native_node()));
 		if (m_context) {
-			m_context->add({{"cmd", std::string(dnet_cmd_string(control.get_native().cmd))},
-			                {"id", std::string(dnet_dump_id_str(m_key.id().id))},
-			                {"access", "client"},
-			                {"cflags",  std::string(dnet_flags_dump_cflags(control.get_native().cflags))},
-			                {"trace_id", to_hex_string(m_session.get_trace_id())},
-			               });
+			m_context->add({ {"cmd", std::string(dnet_cmd_string(control.get_native().cmd))},
+					{"id", std::string(dnet_dump_id_str(m_key.id().id))},
+					{"access", "client"},
+					{"cflags",  std::string(dnet_flags_dump_cflags(control.get_native().cflags))},
+					{"trace_id", to_hex_string(m_session.get_trace_id())},
+				});
 		}
 
 		m_transes.reserve(groups.size());
 
-		async_lookup_result result{m_session};
+		async_lookup_result result{ m_session };
 		auto handler = std::make_shared<inner_handler>(m_session, result, std::move(groups),
-		                                               control.get_native());
+			control.get_native());
 		handler->set_total(m_handler.get_total());
 		handler->start();
 		result.connect(
@@ -166,11 +168,11 @@ private:
 		m_handler.complete(error);
 
 		if (m_context) {
-			m_context->add({"transes", [&] {
+			m_context->add({ "transes", [&] {
 				std::ostringstream result;
 				result << m_transes;
 				return std::move(result.str());
-			}()});
+			}() });
 			m_context.reset(); // destroy context to print access log
 		}
 	}
@@ -185,7 +187,7 @@ private:
 };
 
 async_lookup_result session::lookup(const key &id) {
-	trace_scope scope{*this};
+	trace_scope scope{ *this };
 	DNET_SESSION_GET_GROUPS(async_lookup_result);
 	transform(id);
 
@@ -203,12 +205,12 @@ async_lookup_result session::lookup(const key &id) {
 class remove_handler : public std::enable_shared_from_this<remove_handler> {
 public:
 	explicit remove_handler(const async_remove_result &result,
-	                        const session &session,
-	                        const key &key)
-	: m_key(key)
-	, m_session(session.clean_clone())
-	, m_handler(result)
-	, m_log(session.get_logger()) {
+		const session &session,
+		const key &key)
+		: m_key(key)
+		, m_session(session.clean_clone())
+		, m_handler(result)
+		, m_log(session.get_logger()) {
 		m_session.set_checker(session.get_checker());
 
 		const size_t count = m_session.get_groups().size();
@@ -217,20 +219,20 @@ public:
 
 	void start(const transport_control &control, const dnet_remove_request &request) {
 		DNET_LOG_INFO(m_log, "{}: {}: started: groups: {}, ioflags: {}, ts: '{}",
-		              dnet_dump_id_str(m_key.id().id), dnet_cmd_string(control.get_native().cmd),
-		              m_session.get_groups(), dnet_flags_dump_ioflags(request.ioflags),
-		              dnet_print_time(&request.timestamp));
+			dnet_dump_id_str(m_key.id().id), dnet_cmd_string(control.get_native().cmd),
+			m_session.get_groups(), dnet_flags_dump_ioflags(request.ioflags),
+			dnet_print_time(&request.timestamp));
 
 		m_context.reset(new dnet_access_context(m_session.get_native_node()));
 		if (m_context) {
-			m_context->add({{"cmd", std::string(dnet_cmd_string(control.get_native().cmd))},
-			                {"id", std::string(dnet_dump_id_str(m_key.id().id))},
-			                {"access", "client"},
-			                {"ioflags", std::string(dnet_flags_dump_ioflags(request.ioflags))},
-			                {"cflags", std::string(dnet_flags_dump_cflags(control.get_native().cflags))},
-			                {"ts", std::string(dnet_print_time(&request.timestamp))},
-			                {"trace_id", to_hex_string(m_session.get_trace_id())},
-			               });
+			m_context->add({ {"cmd", std::string(dnet_cmd_string(control.get_native().cmd))},
+					{"id", std::string(dnet_dump_id_str(m_key.id().id))},
+					{"access", "client"},
+					{"ioflags", std::string(dnet_flags_dump_ioflags(request.ioflags))},
+					{"cflags", std::string(dnet_flags_dump_cflags(control.get_native().cflags))},
+					{"ts", std::string(dnet_print_time(&request.timestamp))},
+					{"trace_id", to_hex_string(m_session.get_trace_id())},
+				});
 		}
 
 		auto rr = send_to_groups(m_session, control);
@@ -254,11 +256,11 @@ private:
 		m_handler.complete(error);
 
 		if (m_context) {
-			m_context->add({"transes", [&] {
+			m_context->add({ "transes", [&] {
 				std::ostringstream result;
 				result << m_transes;
 				return std::move(result.str());
-			}()});
+			}() });
 			m_context.reset(); // destroy context to print access log
 		}
 	}
@@ -275,7 +277,7 @@ private:
 };
 
 async_remove_result session::remove(const key &id) {
-	trace_scope scope{*this};
+	trace_scope scope{ *this };
 	transform(id);
 
 	dnet_remove_request request;
@@ -290,7 +292,7 @@ async_remove_result session::remove(const key &id) {
 	control.set_cflags(get_cflags() | DNET_FLAGS_NEED_ACK);
 	control.set_data(packet.data(), packet.size());
 
-	async_remove_result result{*this};
+	async_remove_result result{ *this };
 	auto handler = std::make_shared<remove_handler>(result, *this, id);
 	handler->start(control, request);
 	return result;
@@ -302,12 +304,12 @@ private:
 	class inner_handler : public multigroup_handler<inner_handler, read_result_entry> {
 	public:
 		inner_handler(const session &session,
-		              const async_read_result &result,
-		              std::vector<int> &&groups,
-		              const dnet_trans_control &control,
-		              const dnet_read_request &request)
-		: parent_type(session, result, std::move(groups))
-		, m_control(control) {
+			const async_read_result &result,
+			std::vector<int> &&groups,
+			const dnet_trans_control &control,
+			const dnet_read_request &request)
+			: parent_type(session, result, std::move(groups))
+			, m_control(control) {
 			m_packet = serialize(request);
 			m_control.data = m_packet.data();
 			m_control.size = m_packet.size();
@@ -326,35 +328,35 @@ private:
 
 public:
 	explicit read_handler(const session &session,
-	                      const async_read_result &result,
-	                      const key &key)
-	: m_key(key)
-	, m_session(session.clean_clone())
-	, m_handler(result)
-	, m_log(session.get_logger()) {
+		const async_read_result &result,
+		const key &key)
+		: m_key(key)
+		, m_session(session.clean_clone())
+		, m_handler(result)
+		, m_log(session.get_logger()) {
 		m_session.set_checker(session.get_checker());
 		m_handler.set_total(1);
 	}
 
 	void start(std::vector<int> &&groups, const transport_control &control, const dnet_read_request &request) {
 		DNET_LOG_INFO(m_log, "{}: {}: started: groups: {}, ioflags: {}, read-flags: {}, offset: {}, size: {}",
-		              dnet_dump_id_str(m_key.raw_id().id), dnet_cmd_string(control.get_native().cmd), groups,
-		              dnet_flags_dump_ioflags(request.ioflags), dnet_dump_read_flags(request.read_flags),
-		              request.data_offset, request.data_size);
+			dnet_dump_id_str(m_key.raw_id().id), dnet_cmd_string(control.get_native().cmd), groups,
+			dnet_flags_dump_ioflags(request.ioflags), dnet_dump_read_flags(request.read_flags),
+			request.data_offset, request.data_size);
 
 		m_context.reset(new dnet_access_context(m_session.get_native_node()));
 		if (m_context) {
-			m_context->add({{"cmd", std::string(dnet_cmd_string(control.get_native().cmd))},
-			                {"id", std::string(dnet_dump_id_str(m_key.id().id))},
-			                {"access", "client"},
-			                {"ioflags", std::string(dnet_flags_dump_ioflags(request.ioflags))},
-			                {"cflags", std::string(dnet_flags_dump_cflags(control.get_native().cflags))},
-			                {"read_flags", std::string(dnet_dump_read_flags(request.read_flags))},
-			                {"request_offset", request.data_offset},
-			                {"request_size", request.data_size},
-			                {"deadline", std::string(dnet_print_time(&request.deadline))},
-			                {"trace_id", to_hex_string(m_session.get_trace_id())},
-			               });
+			m_context->add({ {"cmd", std::string(dnet_cmd_string(control.get_native().cmd))},
+					{"id", std::string(dnet_dump_id_str(m_key.id().id))},
+					{"access", "client"},
+					{"ioflags", std::string(dnet_flags_dump_ioflags(request.ioflags))},
+					{"cflags", std::string(dnet_flags_dump_cflags(control.get_native().cflags))},
+					{"read_flags", std::string(dnet_dump_read_flags(request.read_flags))},
+					{"request_offset", request.data_offset},
+					{"request_size", request.data_size},
+					{"deadline", std::string(dnet_print_time(&request.deadline))},
+					{"trace_id", to_hex_string(m_session.get_trace_id())},
+				});
 		}
 
 		m_responses.groups.reserve(groups.size());
@@ -366,7 +368,7 @@ public:
 
 		async_read_result result(m_session);
 		auto handler = std::make_shared<inner_handler>(m_session, result, std::move(groups),
-		                                               control.get_native(), request);
+			control.get_native(), request);
 		handler->set_total(m_handler.get_total());
 		handler->start();
 		result.connect(
@@ -400,20 +402,20 @@ private:
 		m_handler.complete(error);
 
 		DNET_LOG_INFO(m_log, "{}: {}: finished: groups: {}, trans: {}, status: {}, json-size: {}, data-size: "
-		                     "{}, total_time: {}",
-		              dnet_dump_id_str(m_key.id().id), dnet_cmd_string(DNET_CMD_READ_NEW), m_responses.groups,
-		              m_responses.transes, m_responses.statuses, m_responses.json_sizes, m_responses.data_sizes,
-		              m_timer.get_us());
+			"{}, total_time: {}",
+			dnet_dump_id_str(m_key.id().id), dnet_cmd_string(DNET_CMD_READ_NEW), m_responses.groups,
+			m_responses.transes, m_responses.statuses, m_responses.json_sizes, m_responses.data_sizes,
+			m_timer.get_us());
 
 		if (m_context) {
-			m_context->add({{"transes", [&] {
-				        	std::ostringstream result;
-				        	result << m_transes;
-				        	return std::move(result.str());
-			                }()},
-			                {"read_json_size", m_read_json_size},
-			                {"read_data_size", m_read_data_size},
-			               });
+			m_context->add({ {"transes", [&] {
+						std::ostringstream result;
+						result << m_transes;
+						return std::move(result.str());
+					}()},
+					{"read_json_size", m_read_json_size},
+					{"read_data_size", m_read_data_size},
+				});
 			m_context.reset(); // destroy context to print access log
 		}
 	}
@@ -425,8 +427,8 @@ private:
 	std::unique_ptr<dnet_logger> m_log;
 
 	std::vector<uint64_t> m_transes;
-	uint64_t m_read_json_size{0};
-	uint64_t m_read_data_size{0};
+	uint64_t m_read_json_size{ 0 };
+	uint64_t m_read_data_size{ 0 };
 
 	struct {
 		std::vector<uint32_t> groups;
@@ -440,7 +442,7 @@ private:
 };
 
 async_read_result send_read(const session &orig_sess, const key &id, const dnet_read_request &request,
-                            std::vector<int> &&groups) {
+	std::vector<int> &&groups) {
 	transport_control control;
 	control.set_key(id.id());
 	control.set_command(DNET_CMD_READ_NEW);
@@ -453,7 +455,7 @@ async_read_result send_read(const session &orig_sess, const key &id, const dnet_
 }
 
 async_read_result session::read_json(const key &id) {
-	trace_scope scope{*this};
+	trace_scope scope{ *this };
 	DNET_SESSION_GET_GROUPS(async_read_result);
 	transform(id);
 
@@ -470,7 +472,7 @@ async_read_result session::read_json(const key &id) {
 }
 
 async_read_result session::read_data(const key &id, uint64_t offset, uint64_t size) {
-	trace_scope scope{*this};
+	trace_scope scope{ *this };
 	DNET_SESSION_GET_GROUPS(async_read_result);
 	transform(id);
 
@@ -489,7 +491,7 @@ async_read_result session::read_data(const key &id, uint64_t offset, uint64_t si
 }
 
 async_read_result session::read(const key &id, uint64_t offset, uint64_t size) {
-	trace_scope scope{*this};
+	trace_scope scope{ *this };
 	DNET_SESSION_GET_GROUPS(async_read_result);
 	transform(id);
 
@@ -511,45 +513,45 @@ async_read_result session::read(const key &id, uint64_t offset, uint64_t size) {
 class write_handler : public std::enable_shared_from_this<write_handler> {
 public:
 	explicit write_handler(const async_write_result &result,
-	                       const session &session,
-	                       const key &key)
-	: m_key(key)
-	, m_session(session.clean_clone())
-	, m_handler(result)
-	, m_log(session.get_logger()) {
+		const session &session,
+		const key &key)
+		: m_key(key)
+		, m_session(session.clean_clone())
+		, m_handler(result)
+		, m_log(session.get_logger()) {
 		m_session.set_checker(session.get_checker());
 	}
 
 	void start(const transport_control &control, const dnet_write_request &request) {
 		DNET_LOG_INFO(m_log, "{}: {}: started: groups: {}, ioflags: {}, "
-		                     "json: {{size: {}, capacity: {}, ts: '{}'}}, "
-		                     "data: {{offset: {}, size: {}, capacity: {}, commit-size: {}, ts: '{}'}}",
-		              dnet_dump_id_str(m_key.id().id), dnet_cmd_string(control.get_native().cmd),
-		              m_session.get_groups(), dnet_flags_dump_ioflags(request.ioflags),
-		              request.json_size, request.json_capacity, dnet_print_time(&request.json_timestamp),
-		              request.data_offset, request.data_size, request.data_capacity, request.data_commit_size,
-		              dnet_print_time(&request.timestamp));
+			"json: {{size: {}, capacity: {}, ts: '{}'}}, "
+			"data: {{offset: {}, size: {}, capacity: {}, commit-size: {}, ts: '{}'}}",
+			dnet_dump_id_str(m_key.id().id), dnet_cmd_string(control.get_native().cmd),
+			m_session.get_groups(), dnet_flags_dump_ioflags(request.ioflags),
+			request.json_size, request.json_capacity, dnet_print_time(&request.json_timestamp),
+			request.data_offset, request.data_size, request.data_capacity, request.data_commit_size,
+			dnet_print_time(&request.timestamp));
 
 		m_context.reset(new dnet_access_context(m_session.get_native_node()));
 		if (m_context) {
-			m_context->add({{"cmd", std::string(dnet_cmd_string(control.get_native().cmd))},
-			                {"id", std::string(dnet_dump_id_str(m_key.id().id))},
-			                {"access", "client"},
-			                {"ioflags", std::string(dnet_flags_dump_ioflags(request.ioflags))},
-			                {"cflags", std::string(dnet_flags_dump_cflags(control.get_native().cflags))},
-			                {"user_flags", request.user_flags},
-			                {"json_ts", std::string(dnet_print_time(&request.json_timestamp))},
-			                {"json_size", request.json_size},
-			                {"json_capacity", request.json_capacity},
-			                {"data_ts", std::string(dnet_print_time(&request.timestamp))},
-			                {"data_offset", request.data_offset},
-			                {"data_size", request.data_size},
-			                {"data_capacity", request.data_capacity},
-			                {"data_commit_size", request.data_commit_size},
-			                {"cache_lifetime", request.cache_lifetime},
-			                {"deadline", std::string(dnet_print_time(&request.deadline))},
-			                {"trace_id", to_hex_string(m_session.get_trace_id())},
-			               });
+			m_context->add({ {"cmd", std::string(dnet_cmd_string(control.get_native().cmd))},
+					{"id", std::string(dnet_dump_id_str(m_key.id().id))},
+					{"access", "client"},
+					{"ioflags", std::string(dnet_flags_dump_ioflags(request.ioflags))},
+					{"cflags", std::string(dnet_flags_dump_cflags(control.get_native().cflags))},
+					{"user_flags", request.user_flags},
+					{"json_ts", std::string(dnet_print_time(&request.json_timestamp))},
+					{"json_size", request.json_size},
+					{"json_capacity", request.json_capacity},
+					{"data_ts", std::string(dnet_print_time(&request.timestamp))},
+					{"data_offset", request.data_offset},
+					{"data_size", request.data_size},
+					{"data_capacity", request.data_capacity},
+					{"data_commit_size", request.data_commit_size},
+					{"cache_lifetime", request.cache_lifetime},
+					{"deadline", std::string(dnet_print_time(&request.deadline))},
+					{"trace_id", to_hex_string(m_session.get_trace_id())},
+				});
 		}
 
 		const auto groups_number = m_session.get_groups().size();
@@ -589,17 +591,17 @@ private:
 		m_handler.complete(error);
 
 		DNET_LOG_INFO(m_log, "{}: {}: finished: groups: {}, trans: {}, status: {}, json-size: {}, data-size: "
-		                     "{}, total_time: {}",
-		              dnet_dump_id_str(m_key.id().id), dnet_cmd_string(DNET_CMD_WRITE_NEW), m_responses.groups,
-		              m_responses.transes, m_responses.statuses, m_responses.json_sizes, m_responses.data_sizes,
-		              m_timer.get_us());
+			"{}, total_time: {}",
+			dnet_dump_id_str(m_key.id().id), dnet_cmd_string(DNET_CMD_WRITE_NEW), m_responses.groups,
+			m_responses.transes, m_responses.statuses, m_responses.json_sizes, m_responses.data_sizes,
+			m_timer.get_us());
 
 		if (m_context) {
-			m_context->add({"trans", [&] {
-				        	std::ostringstream result;
-				        	result << m_transes;
-				        	return std::move(result.str());
-			               }()});
+			m_context->add({ "trans", [&] {
+						std::ostringstream result;
+						result << m_transes;
+						return std::move(result.str());
+				       }() });
 			m_context.reset(); // destroy context to print access log
 		}
 	}
@@ -623,9 +625,9 @@ private:
 };
 
 async_write_result send_write(const session &orig_sess, const key &id, const dnet_write_request &request,
-                              const argument_data &json, const argument_data &data) {
+	const argument_data &json, const argument_data &data) {
 
-	auto packet = [&] () {
+	auto packet = [&]() {
 		auto header = serialize(request);
 
 		auto ret = data_pointer::allocate(header.size() + json.size() + data.size());
@@ -673,9 +675,9 @@ static dnet_write_request create_write_request(const session &sess)
 }
 
 async_write_result session::write(const key &id,
-                                  const argument_data &json, uint64_t json_capacity,
-                                  const argument_data &data, uint64_t data_capacity) {
-	trace_scope scope{*this};
+	const argument_data &json, uint64_t json_capacity,
+	const argument_data &data, uint64_t data_capacity) {
+	trace_scope scope{ *this };
 	transform(id);
 
 	auto on_fail = [this](const error_info & error) {
@@ -687,7 +689,8 @@ async_write_result session::write(const key &id,
 
 	try {
 		validate_json(std::string((const char*)json.data(), json.size()));
-	} catch (const std::exception &e) {
+	}
+	catch (const std::exception &e) {
 		return on_fail(create_error(-EINVAL, "invalid json: %s", e.what()));
 	}
 
@@ -701,23 +704,23 @@ async_write_result session::write(const key &id,
 
 	if (json_capacity < json.size()) {
 		return on_fail(create_error(-EINVAL,
-		                            "json_capacity (%llu) is less than json.size() (%llu)",
-		                            (unsigned long long)json_capacity,
-		                            (unsigned long long)json.size()));
+			"json_capacity (%llu) is less than json.size() (%llu)",
+			(unsigned long long)json_capacity,
+			(unsigned long long)json.size()));
 	}
 
 	if (data_capacity < data.size()) {
 		return on_fail(create_error(-EINVAL,
-		                            "data_capacity (%llu) is less than data.size() (%llu)",
-		                            (unsigned long long)data_capacity,
-		                            (unsigned long long)data.size()));
+			"data_capacity (%llu) is less than data.size() (%llu)",
+			(unsigned long long)data_capacity,
+			(unsigned long long)data.size()));
 	}
 
 	dnet_write_request request = create_write_request(*this);
 
 	request.ioflags |= DNET_IO_FLAGS_PREPARE |
-	                   DNET_IO_FLAGS_COMMIT |
-	                   DNET_IO_FLAGS_PLAIN_WRITE;
+		DNET_IO_FLAGS_COMMIT |
+		DNET_IO_FLAGS_PLAIN_WRITE;
 	request.ioflags &= ~DNET_IO_FLAGS_UPDATE_JSON;
 
 	request.json_size = json.size();
@@ -731,9 +734,9 @@ async_write_result session::write(const key &id,
 }
 
 async_lookup_result session::write_prepare(const key &id,
-                                           const argument_data &json, uint64_t json_capacity,
-                                           const argument_data &data, uint64_t data_offset, uint64_t data_capacity) {
-	trace_scope scope{*this};
+	const argument_data &json, uint64_t json_capacity,
+	const argument_data &data, uint64_t data_offset, uint64_t data_capacity) {
+	trace_scope scope{ *this };
 	transform(id);
 
 	auto on_fail = [this](const error_info & error) {
@@ -745,7 +748,8 @@ async_lookup_result session::write_prepare(const key &id,
 
 	try {
 		validate_json(std::string((const char*)json.data(), json.size()));
-	} catch (const std::exception &e) {
+	}
+	catch (const std::exception &e) {
 		return on_fail(create_error(-EINVAL, "invalid json: %s", e.what()));
 	}
 
@@ -759,17 +763,17 @@ async_lookup_result session::write_prepare(const key &id,
 
 	if (json_capacity < json.size()) {
 		return on_fail(create_error(-EINVAL,
-		                            "json_capacity (%llu) is less than json.size() (%llu)",
-		                            (unsigned long long)json_capacity,
-		                            (unsigned long long)json.size()));
+			"json_capacity (%llu) is less than json.size() (%llu)",
+			(unsigned long long)json_capacity,
+			(unsigned long long)json.size()));
 	}
 
 	if (data_capacity < data_offset + data.size()) {
 		return on_fail(create_error(-EINVAL,
-		                            "data_capacity (%llu) is less than data_offset (%llu) + data.size() (%llu)",
-		                            (unsigned long long)data_capacity,
-		                            (unsigned long long)data_offset,
-		                            (unsigned long long)data.size()));
+			"data_capacity (%llu) is less than data_offset (%llu) + data.size() (%llu)",
+			(unsigned long long)data_capacity,
+			(unsigned long long)data_offset,
+			(unsigned long long)data.size()));
 	}
 
 	dnet_write_request request = create_write_request(*this);
@@ -788,14 +792,15 @@ async_lookup_result session::write_prepare(const key &id,
 }
 
 async_lookup_result session::write_plain(const key &id,
-                                         const argument_data &json,
-                                         const argument_data &data, uint64_t data_offset) {
-	trace_scope scope{*this};
+	const argument_data &json,
+	const argument_data &data, uint64_t data_offset) {
+	trace_scope scope{ *this };
 	transform(id);
 
 	try {
 		validate_json(std::string((const char*)json.data(), json.size()));
-	} catch (const std::exception &e) {
+	}
+	catch (const std::exception &e) {
 		async_write_result result(*this);
 		async_result_handler<write_result_entry> handler(result);
 		handler.complete(create_error(-EINVAL, "invalid json: %s", e.what()));
@@ -816,14 +821,15 @@ async_lookup_result session::write_plain(const key &id,
 }
 
 async_lookup_result session::write_commit(const key &id,
-                                          const argument_data &json,
-                                          const argument_data &data, uint64_t data_offset, uint64_t data_commit_size) {
-	trace_scope scope{*this};
+	const argument_data &json,
+	const argument_data &data, uint64_t data_offset, uint64_t data_commit_size) {
+	trace_scope scope{ *this };
 	transform(id);
 
 	try {
 		validate_json(std::string((const char*)json.data(), json.size()));
-	} catch (const std::exception &e) {
+	}
+	catch (const std::exception &e) {
 		async_write_result result(*this);
 		async_result_handler<write_result_entry> handler(result);
 		handler.complete(create_error(-EINVAL, "invalid json: %s", e.what()));
@@ -848,12 +854,13 @@ async_lookup_result session::write_commit(const key &id,
 }
 
 async_lookup_result session::update_json(const key &id, const argument_data &json) {
-	trace_scope scope{*this};
+	trace_scope scope{ *this };
 	transform(id);
 
 	try {
 		validate_json(std::string((const char*)json.data(), json.size()));
-	} catch (const std::exception &e) {
+	}
+	catch (const std::exception &e) {
 		async_write_result result(*this);
 		async_result_handler<write_result_entry> handler(result);
 		handler.complete(create_error(-EINVAL, "invalid json: %s", e.what()));
@@ -873,49 +880,49 @@ async_lookup_result session::update_json(const key &id, const argument_data &jso
 class iterator_handler : public std::enable_shared_from_this<iterator_handler> {
 public:
 	explicit iterator_handler(const async_iterator_result &result,
-	                          const session &session,
-	                          const address &address,
-	                          const uint32_t backend_id)
-	: m_session(session.clean_clone())
-	, m_handler(result)
-	, m_log(session.get_logger())
-	, m_address(address)
-	, m_backend_id(backend_id) {
+		const session &session,
+		const address &address,
+		const uint32_t backend_id)
+		: m_session(session.clean_clone())
+		, m_handler(result)
+		, m_log(session.get_logger())
+		, m_address(address)
+		, m_backend_id(backend_id) {
 		m_session.set_direct_id(m_address, m_backend_id);
 	}
 
 	void start(const transport_control &control, const dnet_iterator_request &request) {
 		DNET_LOG_INFO(m_log, "{}: started: st: {}/{}, id: {}, action: {}, type: {}, iflags: {}, "
-		                     "key_ranges: {}, ts_range: '{}' - '{}', groups: {}",
-		              dnet_cmd_string(control.get_native().cmd), m_address.to_string_with_family(),
-		              m_backend_id, request.iterator_id, request.action, request.type, request.flags,
-		              request.key_ranges.size(), dnet_print_time(&std::get<0>(request.time_range)),
-		              dnet_print_time(&std::get<1>(request.time_range)), request.groups);
+			"key_ranges: {}, ts_range: '{}' - '{}', groups: {}",
+			dnet_cmd_string(control.get_native().cmd), m_address.to_string_with_family(),
+			m_backend_id, request.iterator_id, request.action, request.type, request.flags,
+			request.key_ranges.size(), dnet_print_time(&std::get<0>(request.time_range)),
+			dnet_print_time(&std::get<1>(request.time_range)), request.groups);
 
 		m_context.reset(new dnet_access_context(m_session.get_native_node()));
 		if (m_context) {
-			m_context->add({{"cmd", std::string(dnet_cmd_string(control.get_native().cmd))},
-			                {"access", "client"},
-			                {"st", m_address.to_string_with_family()},
-			                {"backend_id", m_backend_id},
-			                {"iterator_id", request.iterator_id},
-			                {"action", request.action},
-			                {"type", request.type},
-			                {"flags", request.flags},
-			                {"key_ranges", request.key_ranges.size()},
-			                {"time_range", [&] {
-				        	std::ostringstream result;
-				        	result << dnet_print_time(&std::get<0>(request.time_range)) << " - "
-				        	       << dnet_print_time(&std::get<1>(request.time_range));
-				        	return std::move(result.str());
-			                }()},
-			                {"groups", [&] {
-				        	std::ostringstream result;
-				        	result << request.groups;
-				        	return std::move(result.str());
-			                }()},
-			                {"trace_id", to_hex_string(m_session.get_trace_id())},
-			               });
+			m_context->add({ {"cmd", std::string(dnet_cmd_string(control.get_native().cmd))},
+					{"access", "client"},
+					{"st", m_address.to_string_with_family()},
+					{"backend_id", m_backend_id},
+					{"iterator_id", request.iterator_id},
+					{"action", request.action},
+					{"type", request.type},
+					{"flags", request.flags},
+					{"key_ranges", request.key_ranges.size()},
+					{"time_range", [&] {
+						std::ostringstream result;
+						result << dnet_print_time(&std::get<0>(request.time_range)) << " - "
+						       << dnet_print_time(&std::get<1>(request.time_range));
+						return std::move(result.str());
+					}()},
+					{"groups", [&] {
+						std::ostringstream result;
+						result << request.groups;
+						return std::move(result.str());
+					}()},
+					{"trace_id", to_hex_string(m_session.get_trace_id())},
+				});
 		}
 
 		auto rr = async_result_cast<iterator_result_entry>(m_session, send_to_single_state(m_session, control));
@@ -940,13 +947,13 @@ private:
 		m_handler.complete(error);
 
 		if (m_context) {
-			m_context->add({{"trans", m_trans},
-			                {"statuses", [&] {
-				        	std::ostringstream result;
-				        	result << m_statuses;
-				        	return std::move(result.str());
-			                }()},
-			               });
+			m_context->add({ {"trans", m_trans},
+					{"statuses", [&] {
+						std::ostringstream result;
+						result << m_statuses;
+						return std::move(result.str());
+					}()},
+				});
 			m_context.reset(); // destroy context to print access log
 		}
 	}
@@ -958,20 +965,21 @@ private:
 	const address m_address;
 	const uint32_t m_backend_id;
 
-	uint64_t m_trans{0};
+	uint64_t m_trans{ 0 };
 
 	std::unordered_map<int, size_t> m_statuses;
 	std::unique_ptr<dnet_access_context> m_context;
 };
 
 async_iterator_result session::start_iterator(const address &addr, uint32_t backend_id,
-                                              uint64_t flags,
-                                              const std::vector<dnet_iterator_range> &key_ranges,
-                                              const std::tuple<dnet_time, dnet_time> &time_range) {
-	trace_scope scope{*this};
+	uint64_t flags,
+	const std::vector<dnet_iterator_range> &key_ranges,
+	const std::tuple<dnet_time, dnet_time> &time_range) {
+	trace_scope scope{ *this };
 	if (key_ranges.empty()) {
 		flags &= ~DNET_IFLAGS_KEY_RANGE;
-	} else {
+	}
+	else {
 		flags |= DNET_IFLAGS_KEY_RANGE;
 	}
 
@@ -996,11 +1004,11 @@ async_iterator_result session::start_iterator(const address &addr, uint32_t back
 }
 
 async_iterator_result session::server_send(const std::vector<dnet_raw_id> &keys, uint64_t flags, uint64_t chunk_size,
-                                           const int src_group, const std::vector<int> &dst_groups) {
+	const int src_group, const std::vector<int> &dst_groups) {
 	std::vector<key> converted_keys;
 	converted_keys.reserve(keys.size());
 
-	for (const auto &key: keys) {
+	for (const auto &key : keys) {
 		converted_keys.emplace_back(key);
 	}
 
@@ -1008,11 +1016,11 @@ async_iterator_result session::server_send(const std::vector<dnet_raw_id> &keys,
 }
 
 async_iterator_result session::server_send(const std::vector<std::string> &keys, uint64_t flags, uint64_t chunk_size,
-                                           const int src_group, const std::vector<int> &dst_groups) {
+	const int src_group, const std::vector<int> &dst_groups) {
 	std::vector<key> converted_keys;
 	converted_keys.reserve(keys.size());
 
-	for (const auto &key: keys) {
+	for (const auto &key : keys) {
 		converted_keys.emplace_back(key);
 	}
 
@@ -1022,40 +1030,40 @@ async_iterator_result session::server_send(const std::vector<std::string> &keys,
 class server_send_handler : public std::enable_shared_from_this<server_send_handler> {
 public:
 	explicit server_send_handler(const async_iterator_result &result,
-	                             session &session)
-	: m_session(session.clone())
-	, m_handler(result)
-	, m_log(session.get_logger()) {
+		session &session)
+		: m_session(session.clone())
+		, m_handler(result)
+		, m_log(session.get_logger()) {
 	}
 
 	void start(const std::vector<key> &keys,
-	           uint64_t flags,
-	           uint64_t chunk_size,
-	           const int src_group,
-	           const std::vector<int> &dst_groups,
-	           uint64_t chunk_write_timeout,
-	           uint64_t chunk_commit_timeout) {
+		uint64_t flags,
+		uint64_t chunk_size,
+		const int src_group,
+		const std::vector<int> &dst_groups,
+		uint64_t chunk_write_timeout,
+		uint64_t chunk_commit_timeout) {
 		DNET_LOG_INFO(m_log, "{}: started: flags: {}, src_group: {}, dst_groups: {}, "
-		                     "chunk_size: {}, keys: {}, chunk_write_timeout: {}, chunk_commit_timeout: {}",
-		              dnet_cmd_string(DNET_CMD_SEND_NEW), flags, src_group, dst_groups, chunk_size,
-		              keys.size(), chunk_write_timeout, chunk_commit_timeout);
+			"chunk_size: {}, keys: {}, chunk_write_timeout: {}, chunk_commit_timeout: {}",
+			dnet_cmd_string(DNET_CMD_SEND_NEW), flags, src_group, dst_groups, chunk_size,
+			keys.size(), chunk_write_timeout, chunk_commit_timeout);
 
 		m_context.reset(new dnet_access_context(m_session.get_native_node()));
 		if (m_context) {
-			m_context->add({{"cmd", std::string(dnet_cmd_string(DNET_CMD_SEND_NEW))},
-			                {"access", "client"},
-			                {"keys", keys.size()},
-			                {"groups", [&] {
-				        	std::ostringstream result;
-				        	result << dst_groups;
-				        	return std::move(result.str());
-			                }()},
-			                {"flags", flags},
-			                {"chunk_size", chunk_size},
-			                {"trace_id", to_hex_string(m_session.get_trace_id())},
-			                {"chunk_write_timeout", chunk_write_timeout},
-			                {"chunk_commit_timeout", chunk_commit_timeout},
-			               });
+			m_context->add({ {"cmd", std::string(dnet_cmd_string(DNET_CMD_SEND_NEW))},
+					{"access", "client"},
+					{"keys", keys.size()},
+					{"groups", [&] {
+						std::ostringstream result;
+						result << dst_groups;
+						return std::move(result.str());
+					}()},
+					{"flags", flags},
+					{"chunk_size", chunk_size},
+					{"trace_id", to_hex_string(m_session.get_trace_id())},
+					{"chunk_write_timeout", chunk_write_timeout},
+					{"chunk_commit_timeout", chunk_commit_timeout},
+				});
 		}
 
 		if (dst_groups.empty()) {
@@ -1081,24 +1089,24 @@ public:
 		std::map<remote, std::vector<dnet_raw_id>> remotes_ids;
 		dnet_addr address;
 		int backend_id;
-		for (const auto &key: keys) {
+		for (const auto &key : keys) {
 			m_session.transform(key);
 			const int err = dnet_lookup_addr(m_session.get_native(), nullptr, 0, &key.id(), src_group,
-			                                 &address, &backend_id);
+				&address, &backend_id);
 			if (err) {
 				m_handler.complete(create_error(-ENXIO,
-				                               "server_send: could not locate address & backend for "
-				                               "requested key: %d:%s",
-				                               src_group, dnet_dump_id(&key.id())));
+					"server_send: could not locate address & backend for "
+					"requested key: %d:%s",
+					src_group, dnet_dump_id(&key.id())));
 				return;
 			}
 
-			remotes_ids[remote{address, backend_id}].emplace_back(key.raw_id());
+			remotes_ids[remote{ address, backend_id }].emplace_back(key.raw_id());
 		}
 
 		std::vector<async_iterator_result> results;
 		results.reserve(remotes_ids.size());
-		for (auto &pair: remotes_ids) {
+		for (auto &pair : remotes_ids) {
 			const auto &remote = pair.first;
 			const auto &ids = pair.second;
 
@@ -1109,7 +1117,7 @@ public:
 				chunk_size,
 				chunk_write_timeout,
 				chunk_commit_timeout,
-			});
+				});
 
 			transport_control control;
 			control.set_command(DNET_CMD_SEND_NEW);
@@ -1120,7 +1128,7 @@ public:
 			session.set_direct_id(remote.address, remote.backend_id);
 			results.emplace_back(
 				async_result_cast<iterator_result_entry>(m_session,
-				                                         send_to_single_state(session, control))
+					send_to_single_state(session, control))
 			);
 		}
 
@@ -1148,17 +1156,17 @@ private:
 		m_handler.complete(error);
 
 		if (m_context) {
-			m_context->add({{"transes",  [&] {
-				        	std::ostringstream result;
-				        	result << m_transes;
-				        	return std::move(result.str());
-			                }()},
-			                {"statuses", [&] {
-				        	std::ostringstream result;
-				        	result << m_statuses;
-				        	return std::move(result.str());
-			                }()},
-			               });
+			m_context->add({ {"transes",  [&] {
+						std::ostringstream result;
+						result << m_transes;
+						return std::move(result.str());
+					}()},
+					{"statuses", [&] {
+						std::ostringstream result;
+						result << m_statuses;
+						return std::move(result.str());
+					}()},
+				});
 			m_context.reset(); // destroy context to print access log
 		}
 	}
@@ -1174,58 +1182,58 @@ private:
 };
 
 async_iterator_result session::server_send(const std::vector<key> &keys,
-                                           uint64_t flags,
-                                           uint64_t chunk_size,
-                                           const int src_group,
-                                           const std::vector<int> &dst_groups) {
+	uint64_t flags,
+	uint64_t chunk_size,
+	const int src_group,
+	const std::vector<int> &dst_groups) {
 	return server_send(keys, flags, chunk_size, src_group, dst_groups, DNET_DEFAULT_SERVER_SEND_CHUNK_WRITE_TIMEOUT,
-	                   DNET_DEFAULT_SERVER_SEND_CHUNK_COMMIT_TIMEOUT);
+		DNET_DEFAULT_SERVER_SEND_CHUNK_COMMIT_TIMEOUT);
 }
 
 async_iterator_result session::server_send(const std::vector<dnet_raw_id> &keys,
-                                           uint64_t flags,
-                                           uint64_t chunk_size,
-                                           const int src_group,
-                                           const std::vector<int> &dst_groups,
-                                           uint64_t chunk_write_timeout,
-                                           uint64_t chunk_commit_timeout) {
+	uint64_t flags,
+	uint64_t chunk_size,
+	const int src_group,
+	const std::vector<int> &dst_groups,
+	uint64_t chunk_write_timeout,
+	uint64_t chunk_commit_timeout) {
 	std::vector<key> converted_keys;
 	converted_keys.reserve(keys.size());
 
-	for (const auto &key: keys) {
+	for (const auto &key : keys) {
 		converted_keys.emplace_back(key);
 	}
 
 	return server_send(converted_keys, flags, chunk_size, src_group, dst_groups, chunk_write_timeout,
-	                   chunk_commit_timeout);
+		chunk_commit_timeout);
 }
 
 async_iterator_result session::server_send(const std::vector<std::string> &keys,
-                                           uint64_t flags,
-                                           uint64_t chunk_size,
-                                           const int src_group,
-                                           const std::vector<int> &dst_groups,
-                                           uint64_t chunk_write_timeout,
-                                           uint64_t chunk_commit_timeout) {
+	uint64_t flags,
+	uint64_t chunk_size,
+	const int src_group,
+	const std::vector<int> &dst_groups,
+	uint64_t chunk_write_timeout,
+	uint64_t chunk_commit_timeout) {
 	std::vector<key> converted_keys;
 	converted_keys.reserve(keys.size());
 
-	for (const auto &key: keys) {
+	for (const auto &key : keys) {
 		converted_keys.emplace_back(key);
 	}
 
 	return server_send(converted_keys, flags, chunk_size, src_group, dst_groups, chunk_write_timeout,
-	                   chunk_commit_timeout);
+		chunk_commit_timeout);
 }
 
 async_iterator_result session::server_send(const std::vector<key> &keys,
-                                           uint64_t flags,
-                                           uint64_t chunk_size,
-                                           const int src_group,
-                                           const std::vector<int> &dst_groups,
-                                           uint64_t chunk_write_timeout,
-                                           uint64_t chunk_commit_timeout) {
-	trace_scope scope{*this};
+	uint64_t flags,
+	uint64_t chunk_size,
+	const int src_group,
+	const std::vector<int> &dst_groups,
+	uint64_t chunk_write_timeout,
+	uint64_t chunk_commit_timeout) {
+	trace_scope scope{ *this };
 
 	async_iterator_result result(*this);
 	auto handler = std::make_shared<server_send_handler>(result, *this);
@@ -1236,19 +1244,19 @@ async_iterator_result session::server_send(const std::vector<key> &keys,
 class single_bulk_read_handler : public std::enable_shared_from_this<single_bulk_read_handler> {
 public:
 	explicit single_bulk_read_handler(const async_read_result &result,
-	                                  const session &session,
-	                                  const dnet_addr &addr)
-	: m_session(session)
-	, m_handler(result)
-	, m_addr(addr)
-	, m_log(session.get_logger()) {
+		const session &session,
+		const dnet_addr &addr)
+		: m_session(session)
+		, m_handler(result)
+		, m_addr(addr)
+		, m_log(session.get_logger()) {
 	}
 
 	void start(const transport_control &control, const dnet_bulk_read_request &request) {
 		DNET_LOG_NOTICE(m_log, "{}: started: address: {}, flags: {}, read_flags: {}, num_keys: {}",
-		                dnet_cmd_string(control.get_native().cmd), dnet_addr_string(&m_addr),
-		                dnet_flags_dump_ioflags(request.ioflags), dnet_dump_read_flags(request.read_flags),
-		                request.keys.size());
+			dnet_cmd_string(control.get_native().cmd), dnet_addr_string(&m_addr),
+			dnet_flags_dump_ioflags(request.ioflags), dnet_dump_read_flags(request.read_flags),
+			request.keys.size());
 
 		auto rr = async_result_cast<read_result_entry>(m_session, send_to_single_state(m_session, control));
 		m_handler.set_total(rr.total());
@@ -1269,7 +1277,7 @@ private:
 
 		if (!entry.is_valid()) {
 			DNET_LOG_ERROR(m_log, "{}: {}: process: invalid response, status: {}",
-				       dnet_dump_id(&cmd->id), dnet_cmd_string(cmd->cmd), cmd->status);
+				dnet_dump_id(&cmd->id), dnet_cmd_string(cmd->cmd), cmd->status);
 			return;
 		}
 
@@ -1292,7 +1300,7 @@ private:
 
 		if (!found) {
 			DNET_LOG_ERROR(m_log, "{}: {}: process: unknown key, status: {}",
-				       dnet_dump_id(&cmd->id), dnet_cmd_string(cmd->cmd), cmd->status);
+				dnet_dump_id(&cmd->id), dnet_cmd_string(cmd->cmd), cmd->status);
 		}
 
 		m_last_error = cmd->status;
@@ -1315,7 +1323,7 @@ private:
 			auto result_data = std::make_shared<ioremap::elliptics::callback_result_data>(&m_addr, &cmd);
 			result_data->error = error ? error :
 				create_error(m_last_error, "send_bulk_read: read failed for key: %s",
-					     dnet_dump_id(&m_keys[i]));
+					dnet_dump_id(&m_keys[i]));
 			ioremap::elliptics::callback_result_entry entry(result_data);
 			m_handler.process(callback_cast<read_result_entry>(entry));
 		}
@@ -1323,7 +1331,7 @@ private:
 		m_handler.complete(error);
 
 		DNET_LOG_NOTICE(m_log, "{}: finished: address: {}",
-		                dnet_cmd_string(DNET_CMD_BULK_READ_NEW), dnet_addr_string(&m_addr));
+			dnet_cmd_string(DNET_CMD_BULK_READ_NEW), dnet_addr_string(&m_addr));
 	}
 
 private:
@@ -1331,37 +1339,38 @@ private:
 	std::vector<bool> m_key_responses;
 	session m_session;
 	async_result_handler<read_result_entry> m_handler;
-	int m_last_error{0};
+	int m_last_error{ 0 };
 	const dnet_addr m_addr;
 	std::unique_ptr<dnet_logger> m_log;
 };
 
+
 class bulk_read_handler : public std::enable_shared_from_this<bulk_read_handler> {
 public:
 	explicit bulk_read_handler(const async_read_result &result,
-	                           session &session,
-	                           const std::vector<dnet_id> &keys)
-	: m_session(session.clone())
-	, m_handler(result)
-	, m_log(session.get_logger())
-	, m_keys(keys) {
+		session &session,
+		const std::vector<dnet_id> &keys)
+		: m_session(session.clone())
+		, m_handler(result)
+		, m_log(session.get_logger())
+		, m_keys(keys) {
 	}
 
 	void start(uint64_t read_flags) {
 		DNET_LOG_INFO(m_log, "{}: started: keys: {}, read_flags: {}, ioflags: {}",
-		              dnet_cmd_string(DNET_CMD_BULK_READ_NEW), m_keys.size(),
-		              dnet_dump_read_flags(read_flags), dnet_flags_dump_ioflags(m_session.get_ioflags()));
+			dnet_cmd_string(DNET_CMD_BULK_READ_NEW), m_keys.size(),
+			dnet_dump_read_flags(read_flags), dnet_flags_dump_ioflags(m_session.get_ioflags()));
 
 		m_context.reset(new dnet_access_context(m_session.get_native_node()));
 		if (m_context) {
-			m_context->add({{"cmd", std::string(dnet_cmd_string(DNET_CMD_BULK_READ_NEW))},
-			                {"access", "client"},
-			                {"ioflags", std::string(dnet_flags_dump_ioflags(m_session.get_ioflags()))},
-			                {"cflags", std::string(dnet_flags_dump_cflags(m_session.get_cflags()))},
-			                {"read_flags", std::string(dnet_dump_read_flags(read_flags))},
-			                {"keys", m_keys.size()},
-			                {"trace_id", to_hex_string(m_session.get_trace_id())},
-			               });
+			m_context->add({ {"cmd", std::string(dnet_cmd_string(DNET_CMD_BULK_READ_NEW))},
+					{"access", "client"},
+					{"ioflags", std::string(dnet_flags_dump_ioflags(m_session.get_ioflags()))},
+					{"cflags", std::string(dnet_flags_dump_cflags(m_session.get_cflags()))},
+					{"read_flags", std::string(dnet_dump_read_flags(read_flags))},
+					{"keys", m_keys.size()},
+					{"trace_id", to_hex_string(m_session.get_trace_id())},
+				});
 		}
 
 		if (m_keys.empty()) {
@@ -1369,12 +1378,11 @@ public:
 			return;
 		}
 
-		auto dnet_addr_comparator = [] (const dnet_addr &lhs, const dnet_addr &rhs) -> bool {
-			return dnet_addr_cmp(&lhs, &rhs) < 0;
-		};
+		//auto dnet_addr_comparator = [] (const dnet_addr &lhs, const dnet_addr &rhs) -> bool {
+		//	return dnet_addr_cmp(&lhs, &rhs) < 0;
+		//};
 
-		std::map<dnet_addr, std::vector<dnet_id>, decltype(dnet_addr_comparator)> remotes_ids(
-		dnet_addr_comparator); // node_address -> [list of keys]
+		std::map<dnet_addr, std::vector<dnet_id>, dnet_addr_comparator> remotes_ids; // node_address -> [list of keys]
 
 		const bool has_direct_address = !!(m_session.get_cflags() & (DNET_FLAGS_DIRECT | DNET_FLAGS_DIRECT_BACKEND));
 
@@ -1393,23 +1401,25 @@ public:
 
 			for (const auto &id : m_keys) {
 				const int err = dnet_lookup_addr(m_session.get_native(), nullptr, 0, &id, id.group_id,
-				                                 &address, nullptr);
+					&address, nullptr);
 				if (!err) {
 					remotes_ids[address].emplace_back(id);
-				} else {
+				}
+				else {
 					memset(&address, 0, sizeof(address));
 					cmd.id = id;
 					cmd.status = err;
 					auto result_data = std::make_shared<callback_result_data>(&address, &cmd);
 					result_data->error = create_error(err,
-					                                  "send_bulk_read: could not locate address & "
-					                                  "backend for requested key: %s",
-					                                  dnet_dump_id(&id));
+						"send_bulk_read: could not locate address & "
+						"backend for requested key: %s",
+						dnet_dump_id(&id));
 					ioremap::elliptics::callback_result_entry entry(result_data);
 					process(callback_cast<read_result_entry>(entry));
 				}
 			}
-		} else {
+		}
+		else {
 			const auto address = m_session.get_direct_address();
 			remotes_ids.emplace(address.to_raw(), m_keys);
 		}
@@ -1471,17 +1481,17 @@ private:
 		m_handler.complete(error);
 
 		if (m_context) {
-			m_context->add({{"transes", [&] {
-				        	std::ostringstream result;
-				        	result << m_transes;
-				        	return std::move(result.str());
-			                }()},
-			                {"statuses", [&] {
-				        	std::ostringstream result;
-				        	result << m_statuses;
-				        	return std::move(result.str());
-			                }()},
-			               });
+			m_context->add({ {"transes", [&] {
+						std::ostringstream result;
+						result << m_transes;
+						return std::move(result.str());
+					}()},
+					{"statuses", [&] {
+						std::ostringstream result;
+						result << m_statuses;
+						return std::move(result.str());
+					}()},
+				});
 			m_context.reset(); // destroy context to print access log
 		}
 	}
@@ -1497,7 +1507,7 @@ private:
 };
 
 async_read_result send_bulk_read(session &session, const std::vector<dnet_id> &keys, uint64_t read_flags) {
-	trace_scope scope{session};
+	trace_scope scope{ session }; 
 
 	async_read_result result(session);
 	auto handler = std::make_shared<bulk_read_handler>(result, session, keys);
@@ -1517,4 +1527,57 @@ async_read_result session::bulk_read(const std::vector<dnet_id> &keys) {
 	return send_bulk_read(*this, keys, DNET_READ_FLAGS_JSON | DNET_READ_FLAGS_DATA);
 }
 
+async_remove_result send_bulk_remove(session &session, const std::vector<dnet_id> &keys) {
+	trace_scope scope{ session }; 
+
+	async_remove_result result(session);
+	auto handler = std::make_shared<bulk_remove_handler>(result, session, keys);
+	handler->start();
+	return result;
+}
+
+async_remove_result session::bulk_remove(const std::vector<dnet_id> &keys) {
+	return send_bulk_remove(*this, keys);
+}
+
+async_remove_result session::bulk_remove(const std::vector<dnet_raw_id> &keys) {
+	// add group's information
+	std::vector<int> groups = get_groups();
+	std::vector<dnet_id> group_keys;
+	group_keys.reserve(groups.size() * keys.size());
+
+	struct dnet_id tmp;
+	memset(&tmp, 0, sizeof(struct dnet_id));
+
+	for (const auto g : groups)
+		for (const auto& key : keys)
+		{
+			dnet_setup_id(&tmp, static_cast<unsigned int>(g), key.id);
+			group_keys.push_back(tmp);
+		}
+
+	return bulk_remove(group_keys);
+}
+
+void session::split_keys_to_nodes(const std::vector<dnet_id>& keys,
+	std::map<dnet_addr, std::vector<dnet_id>, dnet_addr_comparator>& remotes_ids,
+	std::vector<std::pair<dnet_id, int> >& failed_ids)
+{
+	remotes_ids.clear();
+	failed_ids.clear();
+	dnet_addr address;
+	memset(&address, 0, sizeof(address));
+
+	for (const auto &id : keys) {
+		const int err = dnet_lookup_addr(get_native(), nullptr, 0, &id, id.group_id,
+			&address, nullptr);
+		if (0 == err) {
+			remotes_ids[address].emplace_back(id);
+		}
+		else {
+			memset(&address, 0, sizeof(address));
+			failed_ids.push_back(std::make_pair(id, err));
+		}
+	}
+}
 }}} // ioremap::elliptics::newapi

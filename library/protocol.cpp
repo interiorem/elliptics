@@ -467,6 +467,27 @@ inline msgpack::packer<Stream> &operator <<(msgpack::packer<Stream> &o,
 	return o;
 }
 
+inline ioremap::elliptics::dnet_bulk_remove_request &operator >> (msgpack::object o,
+								  ioremap::elliptics::dnet_bulk_remove_request &v) {
+	if (o.type != msgpack::type::ARRAY || o.via.array.size < 1) {
+		throw msgpack::type_error();
+	}
+
+	const object *p = o.via.array.ptr;
+	p[0].convert(&v.keys);
+
+	return v;
+}
+
+template <typename Stream>
+inline msgpack::packer<Stream> &operator <<(msgpack::packer<Stream> &o,
+					   const ioremap::elliptics::dnet_bulk_remove_request &v) {
+	o.pack_array(1);
+	o.pack(v.keys);
+
+	return o;
+}
+
 
 } // namespace msgpack
 
@@ -535,6 +556,7 @@ DEFINE_HEADER(dnet_write_request);
 
 DEFINE_HEADER(dnet_lookup_response);
 
+DEFINE_HEADER(dnet_bulk_remove_request)
 DEFINE_HEADER(dnet_remove_request);
 
 DEFINE_HEADER(dnet_iterator_request);

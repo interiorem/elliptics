@@ -6,7 +6,14 @@
 
 namespace ioremap { namespace elliptics { namespace newapi {
 
-class session: public elliptics::session {
+struct dnet_addr_comparator {
+	bool operator()(const dnet_addr &lhs, const dnet_addr &rhs) const {
+		return dnet_addr_cmp(&lhs, &rhs) < 0;
+	}
+};
+
+
+class session : public elliptics::session {
 public:
 	explicit session(const node &);
 	explicit session(dnet_node *);
@@ -75,8 +82,8 @@ public:
 	 * Record will be available for lookup/read right after write is executed.
 	 */
 	async_write_result write(const key &id,
-	                         const argument_data &json, uint64_t json_capacity,
-	                         const argument_data &data, uint64_t data_capacity);
+		const argument_data &json, uint64_t json_capacity,
+		const argument_data &data, uint64_t data_capacity);
 
 	/* Prepare place for record by \a key,
 	 * reserve place with size \a json_capacity for future json and
@@ -86,24 +93,24 @@ public:
 	 * Record after prepare will be marked as uncommitted and will be unavailable for lookup/read.
 	 */
 	async_lookup_result write_prepare(const key &id,
-	                                  const argument_data &json, uint64_t json_capacity,
-	                                  const argument_data &data, uint64_t data_offset, uint64_t data_capacity);
+		const argument_data &json, uint64_t json_capacity,
+		const argument_data &data, uint64_t data_offset, uint64_t data_capacity);
 
 	/* Write \a json and data part \a data by key \a id.
 	 * \a data should be written with \a data_offset.
 	 * Record after write_plain remains to be marked as uncommitted and will be unavailable for lookup/read.
 	 */
 	async_lookup_result write_plain(const key &id,
-	                                const argument_data &json,
-	                                const argument_data &data, uint64_t data_offset);
+		const argument_data &json,
+		const argument_data &data, uint64_t data_offset);
 
 	/* Write final \a json and final data part \a data by key \a id.
 	 * \a data should be written with \a data_offset.
 	 * Record after write_plain will be available for lookup/read.
 	 */
 	async_lookup_result write_commit(const key &id,
-	                                 const argument_data &json,
-	                                 const argument_data &data, uint64_t data_offset, uint64_t data_commit_size);
+		const argument_data &json,
+		const argument_data &data, uint64_t data_offset, uint64_t data_commit_size);
 
 	/* Rewrite json of key \a id by \a json.
 	 * If record \a id does not exist, update_json will be failed with -ENOENT.
@@ -114,17 +121,17 @@ public:
 
 
 	async_iterator_result start_iterator(const address &addr, uint32_t backend_id, uint64_t flags,
-	                                     const std::vector<dnet_iterator_range> &key_ranges,
-	                                     const std::tuple<dnet_time, dnet_time> &time_range);
+		const std::vector<dnet_iterator_range> &key_ranges,
+		const std::tuple<dnet_time, dnet_time> &time_range);
 
 	async_iterator_result server_send(const std::vector<dnet_raw_id> &keys, uint64_t flags, uint64_t chunk_size,
-	                                  const int src_group, const std::vector<int> &dst_groups);
+		const int src_group, const std::vector<int> &dst_groups);
 
 	async_iterator_result server_send(const std::vector<std::string> &keys, uint64_t flags, uint64_t chunk_size,
-	                                  const int src_group, const std::vector<int> &dst_groups);
+		const int src_group, const std::vector<int> &dst_groups);
 
 	async_iterator_result server_send(const std::vector<key> &keys, uint64_t flags, uint64_t chunk_size,
-	                                  const int src_group, const std::vector<int> &dst_groups);
+		const int src_group, const std::vector<int> &dst_groups);
 
 
 	/*
@@ -136,16 +143,16 @@ public:
 	 * \a chunk_commit_timeout - timeout in ms for committing one chunk of data
 	 */
 	async_iterator_result server_send(const std::vector<dnet_raw_id> &keys, uint64_t flags, uint64_t chunk_size,
-	                                  const int src_group, const std::vector<int> &dst_groups,
-	                                  uint64_t chunk_write_timeout, uint64_t chunk_commit_timeout);
+		const int src_group, const std::vector<int> &dst_groups,
+		uint64_t chunk_write_timeout, uint64_t chunk_commit_timeout);
 
 	async_iterator_result server_send(const std::vector<std::string> &keys, uint64_t flags, uint64_t chunk_size,
-	                                  const int src_group, const std::vector<int> &dst_groups,
-	                                  uint64_t chunk_write_timeout, uint64_t chunk_commit_timeout);
+		const int src_group, const std::vector<int> &dst_groups,
+		uint64_t chunk_write_timeout, uint64_t chunk_commit_timeout);
 
 	async_iterator_result server_send(const std::vector<key> &keys, uint64_t flags, uint64_t chunk_size,
-	                                  const int src_group, const std::vector<int> &dst_groups,
-	                                  uint64_t chunk_write_timeout, uint64_t chunk_commit_timeout);
+		const int src_group, const std::vector<int> &dst_groups,
+		uint64_t chunk_write_timeout, uint64_t chunk_commit_timeout);
 
 	/*
 	 * Family of bulk_read methods are used to read keys from multiple groups/backends efficiently by
@@ -157,9 +164,16 @@ public:
 	async_read_result bulk_read_data(const std::vector<dnet_id> &keys);
 
 	async_read_result bulk_read(const std::vector<dnet_id> &keys);
+
+	async_remove_result bulk_remove(const std::vector<dnet_id> &keys);
+
+	async_remove_result bulk_remove(const std::vector<dnet_raw_id> &keys);
+
+	void split_keys_to_nodes(const std::vector<dnet_id>& keys, std::map<dnet_addr, std::vector<dnet_id>, dnet_addr_comparator> & remotes_ids,
+		std::vector<std::pair<dnet_id, int> >& failed_ids);
 };
 
-}}} /* namespace ioremap::elliptics::newapi */
+} } } /* namespace ioremap::elliptics::newapi */
 
 
 #endif // ELLIPTICS_NEW_SESSION_HPP

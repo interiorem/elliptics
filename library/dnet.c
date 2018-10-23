@@ -1477,6 +1477,8 @@ static int dnet_process_cmd_without_backend_raw(struct dnet_net_state *st,
 	case DNET_CMD_BULK_READ_NEW:
 		return dnet_cmd_bulk_read_new(st, cmd, data, context);
 		break;
+	case DNET_CMD_BULK_REMOVE_NEW:
+		return dnet_cmd_bulk_remove_new(st, cmd, data, context);
 	default:
 		return -ENOTSUP;
 	}

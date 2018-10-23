@@ -1897,3 +1897,57 @@ int blob_bulk_read_new(struct eblob_backend_config *c,
 
 	return 0;
 }
+
+int blob_bulk_remove_new(struct eblob_backend_config *config,
+	void *state,
+	struct dnet_cmd *cmd,
+	void *data,
+	struct dnet_access_context * /*context*/)
+{
+	using namespace ioremap::elliptics;
+
+	if (config == nullptr || state == nullptr || cmd == nullptr || data == nullptr)
+		return -EINVAL;
+
+	dnet_bulk_remove_request bulk_request;
+	deserialize(data_pointer::from_raw(data, cmd->size), bulk_request);
+
+	dnet_net_state* st = reinterpret_cast<dnet_net_state *>(state);	
+	const int backend_id = config->data.stat_id;
+	auto backend = st->n->io->backends_manager->get(backend_id);
+	if (!backend)
+		return -ENOTSUP;
+
+	auto pool = backend->io_pool();
+	if (!pool) {
+		DNET_LOG_ERROR(config->blog, "EBLOB: {}: couldn't find pool for backend_id: {}",
+			__func__, backend_id);
+		return -EINVAL;
+	}
+
+	eblob_backend *b = config->eblob;
+
+	cmd->flags &= ~DNET_FLAGS_NEED_ACK;
+	struct dnet_cmd cmd_copy(*cmd);
+	cmd_copy.backend_id = backend_id;
+
+	const size_t num_keys = bulk_request.keys.size();
+	int err = 0;
+	for (size_t i = 0; i < num_keys; ++i)
+	{	
+		cmd_copy.id = bulk_request.keys[i];
+
+		struct eblob_key key;
+		memcpy(key.id, bulk_request.keys[i].id, EBLOB_ID_SIZE);
+		{
+			dnet_oplock_guard oplock_guard{ pool, &cmd_copy.id };
+			err = eblob_remove(b, &key);
+		}
+
+		cmd_copy.status = err;
+		const bool last_read = i >= (num_keys - 1);
+		dnet_send_reply(st, &cmd_copy, nullptr, 0, last_read, /*context*/ nullptr);
+	}
+	 
+	return 0;
+}

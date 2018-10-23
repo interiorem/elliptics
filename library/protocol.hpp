@@ -93,6 +93,10 @@ struct dnet_bulk_read_request {
 	dnet_time deadline;
 };
 
+struct dnet_bulk_remove_request {
+	std::vector<dnet_id> keys;
+};
+
 struct dnet_iterator_request {
 	dnet_iterator_request();
 	dnet_iterator_request(uint32_t type, uint64_t flags,
