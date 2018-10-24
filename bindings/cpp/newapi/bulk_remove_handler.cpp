@@ -37,18 +37,67 @@ void single_bulk_remove_handler::start(const transport_control &control, const d
 		std::bind(&single_bulk_remove_handler::complete, shared_from_this(), std::placeholders::_1)
 	);
 }
-void single_bulk_remove_handler::process(const remove_result_entry &entry)
-	{
 
-		// TODO @AU
-	}
-void single_bulk_remove_handler::complete(const error_info &error)
-	{
-		// TODO @AU
+void single_bulk_remove_handler::process(const remove_result_entry &entry) {
+	auto cmd = entry.command();
 
-		DNET_LOG_NOTICE(m_log, "{}: finished: address: {}",
-			dnet_cmd_string(DNET_CMD_BULK_REMOVE_NEW), dnet_addr_string(&m_address));
+	if (!entry.is_valid()) {
+		DNET_LOG_ERROR(m_log, "{}: {}: process: invalid response, status: {}",
+			dnet_dump_id(&cmd->id), dnet_cmd_string(cmd->cmd), cmd->status);
+		return;
 	}
+	// mark responsed key
+	bool found = false;
+	for (auto it = std::lower_bound(m_keys.begin(), m_keys.end(), cmd->id); it != m_keys.end(); ++it) {
+		if (dnet_id_cmp(&cmd->id, &*it) != 0)
+			break;
+
+		const auto index = std::distance(m_keys.begin(), it);
+
+		if (m_key_responses[index])
+			continue;
+
+		m_handler.process(entry);
+
+		m_key_responses[index] = true;
+		found = true;
+		break;
+	}
+
+	if (!found) {
+		DNET_LOG_ERROR(m_log, "{}: {}: process: unknown key, status: {}",
+			dnet_dump_id(&cmd->id), dnet_cmd_string(cmd->cmd), cmd->status);
+	}	
+}
+
+void single_bulk_remove_handler::complete(const error_info &error) {
+	// process all non-responsed keys:
+	dnet_cmd cmd;
+	memset(&cmd, 0, sizeof(cmd));
+	cmd.status = error ? error.code() : 0; // @AU 
+	cmd.cmd = DNET_CMD_BULK_REMOVE_NEW;
+	cmd.trace_id = m_session.get_trace_id();
+	cmd.flags = DNET_FLAGS_REPLY | DNET_FLAGS_MORE |
+		(m_session.get_trace_bit() ? DNET_FLAGS_TRACE_BIT : 0);
+
+	for (size_t i = 0; i < m_keys.size(); ++i) {
+		if (m_key_responses[i])
+			continue;
+
+		cmd.id = m_keys[i];
+		auto result_data = std::make_shared<ioremap::elliptics::callback_result_data>(&m_address, &cmd);
+		result_data->error = error ? error :
+			create_error(0, "send_bulk_remove: remove failed for key: %s",
+				dnet_dump_id(&m_keys[i]));
+		ioremap::elliptics::callback_result_entry entry(result_data);
+		m_handler.process(callback_cast<read_result_entry>(entry));
+	}
+
+	// finish
+	m_handler.complete(error);
+	DNET_LOG_NOTICE(m_log, "{}: finished: address: {}",
+		dnet_cmd_string(DNET_CMD_BULK_REMOVE_NEW), dnet_addr_string(&m_address));
+}
 
 
 void bulk_remove_handler::start()
