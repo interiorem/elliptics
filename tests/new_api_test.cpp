@@ -1721,28 +1721,6 @@ void test_bulk_read(const ioremap::elliptics::newapi::session &session) {
 		check_lookup_result(async, DNET_CMD_WRITE_NEW, record, 1);
 	}
 
-	for (size_t i = 0; i < NUM_KEYS_IN_GROUP; ++i) {
-		for (const int group_id : groups) {
-			record.key = key("bulk_key_" + std::to_string(i));
-			record.key.transform(s);
-			record.key.set_group_id(group_id);
-
-			auto unique_suffix = std::to_string(group_id * NUM_KEYS_IN_GROUP + i);
-			record.json = "{\"key\": \"bulk_json_" + unique_suffix + "\"}";
-			record.data = "bulk_data_" + unique_suffix;
-
-			s.set_groups({ group_id });
-			auto async = s.write(record.key,
-				record.json, record.json_capacity,
-				record.data, record.data_capacity);
-
-			auto it = records.emplace(record.key.id(), record).first;
-
-			write_results.emplace_back(std::move(async), it);
-			ids.emplace_back(record.key.id());
-		}
-	}
-
 	/*
 	 * Step 2. Check bulk read in normal conditions: read keys from all groups
 	 * and check its data. Check it against different read methods:
