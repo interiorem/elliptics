@@ -171,15 +171,7 @@ typedef std::vector<backend_status_result_entry> sync_backend_status_result;
 typedef async_result<iterator_result_entry> async_iterator_result;
 typedef std::vector<iterator_result_entry> sync_iterator_result;
 
-static inline bool operator <(const dnet_raw_id &a, const dnet_raw_id &b)
-{
-	return memcmp(a.id, b.id, sizeof(a.id)) < 0;
-}
 
-static inline bool operator ==(const dnet_raw_id &a, const dnet_raw_id &b)
-{
-	return memcmp(a.id, b.id, sizeof(a.id)) == 0;
-}
 
 static inline bool operator ==(const ioremap::elliptics::data_pointer &a, const ioremap::elliptics::data_pointer &b)
 {
@@ -196,5 +188,15 @@ struct dnet_raw_id_less_than {
 };
 
 }} /* namespace ioremap::elliptics */
+
+static inline bool operator <(const dnet_raw_id &a, const dnet_raw_id &b)
+{
+	return memcmp(a.id, b.id, sizeof(a.id)) < 0;
+}
+
+static inline bool operator ==(const dnet_raw_id &a, const dnet_raw_id &b)
+{
+	return memcmp(a.id, b.id, sizeof(a.id)) == 0;
+}
 
 #endif // ELLIPTICS_RESULT_ENTRY_HPP

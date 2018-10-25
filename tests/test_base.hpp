@@ -13,7 +13,7 @@
 bool operator ==(const dnet_time &lhs, const dnet_time &rhs);
 std::ostream& operator<<(std::ostream &stream, const dnet_time & value);
 
-bool operator ==(const dnet_raw_id &lhs, const dnet_raw_id &rhs);
+//bool operator ==(const dnet_raw_id &lhs, const dnet_raw_id &rhs);
 std::ostream& operator<<(std::ostream &stream, const dnet_raw_id &value);
 
 namespace tests {

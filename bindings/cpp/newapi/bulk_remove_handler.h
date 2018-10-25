@@ -16,7 +16,8 @@ public:
 		: m_address(address)
 		, m_session(session.clean_clone())
 		, m_handler(result)
-		, m_log(session.get_logger())	{}
+		, m_log(session.get_logger())	
+	{ }
 
 	void start(const transport_control &control, const dnet_bulk_remove_request &request);
 private:
@@ -41,7 +42,8 @@ public:
 		: m_keys(keys)
 		, m_session(session.clean_clone())
 		, m_handler(result)
-		, m_log(session.get_logger()) {}
+		, m_log(session.get_logger()) 
+	{ }
 
 	void start();
 private:

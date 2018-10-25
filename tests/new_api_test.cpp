@@ -8,8 +8,10 @@
 #include <eblob/blob.h>
 #include "library/common.hpp"
 #include "elliptics/newapi/session.hpp"
+#include "elliptics/result_entry.hpp"
 
 #include "test_base.hpp"
+#include  <cstdlib>
 
 namespace tests {
 
@@ -1356,6 +1358,295 @@ void test_remove_corrupted(const ioremap::elliptics::newapi::session &session) {
 	BOOST_REQUIRE_EQUAL(result.status(), 0);
 }
 
+
+void test_bulk_remove_raw(const ioremap::elliptics::newapi::session &session) {
+	
+	// start data
+	std::vector<int> groups{ 1, 2, 3, 4, 5, 6 };
+	const static size_t NUM_KEYS_IN_GROUP = 100;
+	const static size_t NUM_KEYS_TOTAL = NUM_KEYS_IN_GROUP * groups.size();
+	
+	record record{
+	std::string{"key"},
+	0xff1ff2ff3,
+	dnet_time{10, 20},
+	dnet_time{10, 20},
+	std::string{"{\"key\": \"key\"}"},
+	512,
+	std::string{"key data"},
+	1024,
+	(session.get_ioflags() & DNET_IO_FLAGS_CACHE) != 0
+	};
+
+	auto s = session.clone();
+	s.set_filter(ioremap::elliptics::filters::all_with_ack);
+	s.set_trace_id(rand());
+	s.set_user_flags(record.user_flags);
+	s.set_timestamp(record.timestamp);
+	s.set_json_timestamp(record.json_timestamp);
+
+	// generate raw ids
+	std::srand(unsigned(std::time(0)));
+
+	auto gen_raw_ids = [&]()
+	{
+		int random_variable = std::rand() % 100;
+		std::string data = "bulk_raw_key_" + std::to_string(random_variable);
+		std::vector<dnet_raw_id> result;
+		result.reserve(NUM_KEYS_IN_GROUP);
+		for (size_t i = 0; i < NUM_KEYS_IN_GROUP; ++i) {
+			dnet_raw_id cur_id;
+			s.transform(data + std::to_string(i), cur_id);
+			result.push_back(cur_id);
+		}
+		return result;
+	};
+
+	std::vector<dnet_raw_id> raw_ids = gen_raw_ids();
+
+	// write ids to every group
+	std::map<dnet_id, tests::record> records;
+	std::vector<std::tuple<ioremap::elliptics::newapi::async_write_result,
+		decltype(records)::const_iterator>> write_results;
+	write_results.reserve(NUM_KEYS_TOTAL);
+
+	for (size_t i = 0; i < raw_ids.size(); ++i) {
+		for (const int group_id : groups) {
+			record.key = key(raw_ids[i]);
+			record.key.transform(s);
+			record.key.set_group_id(group_id);
+
+			auto unique_suffix = std::to_string(group_id * NUM_KEYS_IN_GROUP + i);
+			record.json = "{\"key\": \"bulk_json_" + unique_suffix + "\"}";
+			record.data = "bulk_data_" + unique_suffix;
+			
+			s.set_groups({ group_id });
+			auto async = s.write(record.key,
+				record.json, record.json_capacity,
+				record.data, record.data_capacity);
+
+			auto it = records.emplace(record.key.id(), record).first;
+
+			write_results.emplace_back(std::move(async), it);
+		}
+	}
+	for (auto &r : write_results) {
+		auto &async = std::get<0>(r);
+		const auto &record = std::get<1>(r)->second;
+		check_lookup_result(async, DNET_CMD_WRITE_NEW, record, 1);
+	}
+
+	// helping lambda
+	auto check_raw_remove = [&](ioremap::elliptics::async_remove_result& async_result,
+				    const std::vector<dnet_raw_id>& raw_ids, bool success) {
+		std::map < dnet_raw_id, size_t > responses;
+		size_t count = 0;
+		for (const auto &res : async_result) {
+			BOOST_REQUIRE_EQUAL(res.status(), success ? 0 : -2);
+			BOOST_REQUIRE_EQUAL(res.command()->cmd, DNET_CMD_BULK_REMOVE_NEW);
+			BOOST_REQUIRE_EQUAL(res.error().code(), success ? 0 : -2);
+			if (success) 
+				BOOST_REQUIRE_EQUAL(res.error().message(), "");
+
+			const auto cmd = res.command();
+			dnet_raw_id raw_id;
+			memcpy(raw_id.id, cmd->id.id, DNET_ID_SIZE);
+			++responses[raw_id];
+			++count;
+		}
+		BOOST_REQUIRE_EQUAL(count, NUM_KEYS_TOTAL);
+		size_t group_cnt = groups.size();
+		for (auto& responce : responses)
+			BOOST_REQUIRE_EQUAL(responce.second, group_cnt);
+
+		for (const auto& raw_id : raw_ids)
+			BOOST_REQUIRE(responses.find(raw_id) != responses.end());
+	};
+
+	auto check_absence_by_lookup = [&s](const std::vector<dnet_raw_id>& raw_id) {
+		for (const auto& r_id : raw_id)
+		{
+			auto async_lookup = s.lookup(r_id);
+			for (const auto &result : async_lookup) {
+				BOOST_REQUIRE_EQUAL(result.status(), -2);
+			}
+		}
+	};
+
+	// remove existing raw ids
+	s.set_groups(groups);
+
+	auto async = s.bulk_remove(raw_ids);
+	check_raw_remove(async, raw_ids, true);
+	check_absence_by_lookup(raw_ids);
+
+	// remove non existing raw id
+	std::vector<dnet_raw_id> raw_ids_not_written = gen_raw_ids();
+	async = s.bulk_remove(raw_ids_not_written);
+	check_raw_remove(async, raw_ids_not_written, false);
+}
+
+void test_bulk_remove_not_raw(const ioremap::elliptics::newapi::session &session) {
+	record record{
+	std::string{"key"},
+	0xff1ff2ff3,
+	dnet_time{10, 20},
+	dnet_time{10, 20},
+	std::string{"{\"key\": \"key\"}"},
+	512,
+	std::string{"key data"},
+	1024,
+	(session.get_ioflags() & DNET_IO_FLAGS_CACHE) != 0
+	};
+
+	std::map<dnet_id, tests::record> records;
+	std::set<dnet_id> responses;
+
+	std::vector<int> groups{ 1, 2, 3, 4, 5, 6 };
+
+	/*
+	 * Step 1. Prepare test data: write keys to multiple groups. Each key will be presented
+	 * exactly once in every group.
+	 */
+	const static size_t NUM_KEYS_IN_GROUP = 100;
+	const static size_t NUM_KEYS_TOTAL = NUM_KEYS_IN_GROUP * groups.size();
+
+	std::vector<std::tuple<ioremap::elliptics::newapi::async_write_result,
+		decltype(records)::const_iterator>> write_results;
+	write_results.reserve(NUM_KEYS_TOTAL);
+
+	std::vector<dnet_id> ids;
+	ids.reserve(NUM_KEYS_TOTAL);
+
+	auto s = session.clone();
+	s.set_filter(ioremap::elliptics::filters::all_with_ack);
+	s.set_trace_id(rand());
+	s.set_user_flags(record.user_flags);
+	s.set_timestamp(record.timestamp);
+	s.set_json_timestamp(record.json_timestamp);
+
+	// crate and write keys
+	for (size_t i = 0; i < NUM_KEYS_IN_GROUP; ++i) {
+		for (const int group_id : groups) {
+			record.key = key("bulk_key_" + std::to_string(i));
+			record.key.transform(s);
+			record.key.set_group_id(group_id);
+
+			auto unique_suffix = std::to_string(group_id * NUM_KEYS_IN_GROUP + i);
+			record.json = "{\"key\": \"bulk_json_" + unique_suffix + "\"}";
+			record.data = "bulk_data_" + unique_suffix;
+
+			s.set_groups({ group_id });
+			auto async = s.write(record.key,
+				record.json, record.json_capacity,
+				record.data, record.data_capacity);
+
+			auto it = records.emplace(record.key.id(), record).first;
+
+			write_results.emplace_back(std::move(async), it);
+			ids.emplace_back(record.key.id());
+		}
+	}
+
+	for (auto &r : write_results) {
+		auto &async = std::get<0>(r);
+		const auto &record = std::get<1>(r)->second;
+		check_lookup_result(async, DNET_CMD_WRITE_NEW, record, 1);
+	}
+
+	// create and NOT write keys
+	std::vector<dnet_id> not_ids;
+	not_ids.reserve(NUM_KEYS_TOTAL);
+	for (size_t i = 0; i < NUM_KEYS_IN_GROUP; ++i) {
+		for (const int group_id : groups) {
+			record.key = key("not_written_bulk_key_" + std::to_string(i));
+			record.key.transform(s);
+			record.key.set_group_id(group_id);
+
+			not_ids.emplace_back(record.key.id());
+		}
+	}
+
+	/*
+	* Helping lambda
+	*/
+	auto check_all_ids_presents = [&responses](const std::vector<dnet_id>& ids_to_check) {
+		for (const auto &id : ids_to_check) {
+			BOOST_REQUIRE(responses.find(id) != responses.end());
+		}
+	};
+
+	auto check_remove_result = [&](ioremap::elliptics::async_remove_result &async, bool succsess) {
+		responses.clear();
+		size_t count = 0;
+		for (const auto &result : async) {
+			BOOST_REQUIRE_EQUAL(result.status(), succsess ? 0 : -2);
+			BOOST_REQUIRE_EQUAL(result.command()->cmd, DNET_CMD_BULK_REMOVE_NEW);
+			BOOST_REQUIRE_EQUAL(result.error().code(), succsess ? 0 : -2);
+			if (succsess)
+				BOOST_REQUIRE_EQUAL(result.error().message(), "");
+
+			const auto cmd = result.command();
+			responses.emplace(cmd->id);
+
+			++count;
+		}
+		BOOST_REQUIRE_EQUAL(count, NUM_KEYS_TOTAL);
+	};
+
+	auto check_absence_by_lookup = [&records, &s]() {
+		for (const auto& rec : records)
+		{
+			auto async_lookup = s.lookup(rec.first);
+			for (const auto &result : async_lookup) {
+				BOOST_REQUIRE_EQUAL(result.status(), -2);
+			}
+		}
+	};
+
+	//auto print_results = [&](ioremap::elliptics::async_remove_result &async) {
+	//	size_t count = 0;
+	//	for (const auto &result : async) {
+	//		++count;
+	//		const auto cmd = result.command();
+	//		std::cout << "Response for key " << dnet_dump_id(&cmd->id) << std::endl;
+	//		std::cout << result.status() << std::endl;
+	//		std::cout << result.command()->cmd << std::endl;
+	//		std::cout << result.error().code() << std::endl;
+	//		std::cout << result.error().message() << std::endl;
+	//	}
+	//};
+	/*
+	* Step 2. Remove keys by dnet_id keys
+	* in normal condition : all keys exists
+	*/
+	auto async = s.bulk_remove(ids);
+	check_remove_result(async, true);
+	check_all_ids_presents(ids);
+	check_absence_by_lookup();
+
+	/*
+	* Step 3. Remove keys by dnet_id keys again
+	* in condition : all  keys don't exists
+	*/
+	async = s.bulk_remove(ids);
+	check_remove_result(async, false);
+	check_all_ids_presents(ids);
+
+	/*
+	* Step 4. Remove keys by dnet_id keys
+	* in condition : all  keys nevert exists
+	*/
+	async = s.bulk_remove(not_ids);
+	check_remove_result(async, false);
+	check_all_ids_presents(not_ids);
+}
+
+void test_bulk_remove(const ioremap::elliptics::newapi::session &session) {
+	test_bulk_remove_not_raw(session);
+	test_bulk_remove_raw(session);
+}
+
 void test_bulk_read(const ioremap::elliptics::newapi::session &session) {
 	record record{
 		std::string{"key"},
@@ -1428,6 +1719,28 @@ void test_bulk_read(const ioremap::elliptics::newapi::session &session) {
 		auto &async = std::get<0>(r);
 		const auto &record = std::get<1>(r)->second;
 		check_lookup_result(async, DNET_CMD_WRITE_NEW, record, 1);
+	}
+
+	for (size_t i = 0; i < NUM_KEYS_IN_GROUP; ++i) {
+		for (const int group_id : groups) {
+			record.key = key("bulk_key_" + std::to_string(i));
+			record.key.transform(s);
+			record.key.set_group_id(group_id);
+
+			auto unique_suffix = std::to_string(group_id * NUM_KEYS_IN_GROUP + i);
+			record.json = "{\"key\": \"bulk_json_" + unique_suffix + "\"}";
+			record.data = "bulk_data_" + unique_suffix;
+
+			s.set_groups({ group_id });
+			auto async = s.write(record.key,
+				record.json, record.json_capacity,
+				record.data, record.data_capacity);
+
+			auto it = records.emplace(record.key.id(), record).first;
+
+			write_results.emplace_back(std::move(async), it);
+			ids.emplace_back(record.key.id());
+		}
 	}
 
 	/*
@@ -1670,6 +1983,7 @@ bool register_tests(const nodes_data *setup) {
 
 		if (!in_cache) {
 			ELLIPTICS_TEST_CASE(test_bulk_read, use_session(n, {}, 0, ioflags));
+			ELLIPTICS_TEST_CASE(test_bulk_remove, use_session(n, {}, 0, ioflags));
 		}
 
 		record.json = R"json({
@@ -1681,29 +1995,29 @@ bool register_tests(const nodes_data *setup) {
 		ELLIPTICS_TEST_CASE(test_update_json, use_session(n, {}, 0, ioflags), record);
 		ELLIPTICS_TEST_CASE(test_read_json, use_session(n, {}, 0, ioflags), record);
 		ELLIPTICS_TEST_CASE(test_read_data, use_session(n, {}, 0, ioflags), record, 0, 0);
-
+		
 		record.json = "";
 		record.json_timestamp = dnet_time{12,23};
 		ELLIPTICS_TEST_CASE(test_update_json, use_session(n, {}, 0, ioflags), record);
 		ELLIPTICS_TEST_CASE(test_read_json, use_session(n, {}, 0, ioflags), record);
 		ELLIPTICS_TEST_CASE(test_read_data, use_session(n, {}, 0, ioflags), record, 0, 0);
-
+		
 		if (!in_cache) {
 			ELLIPTICS_TEST_CASE(test_update_bigger_json, use_session(n, {}, 0, ioflags), record);
 		}
-
+		
 		record.key = {in_cache ? "cache_chunked_key" : "chunked_key"};
 		record.json_timestamp = record.timestamp;
 		ELLIPTICS_TEST_CASE(test_write_chunked, use_session(n, {}, 0, ioflags), record);
-
+		
 		if (!in_cache) {
 			ELLIPTICS_TEST_CASE(test_update_json_noexist, use_session(n, {}, 0, ioflags));
 			ELLIPTICS_TEST_CASE(test_update_json_uncommitted, use_session(n, {}, 0, ioflags));
 		}
-
+		
 		ELLIPTICS_TEST_CASE(test_old_write_new_read_compatibility, use_session(n, {}, 0, ioflags));
 		ELLIPTICS_TEST_CASE(test_new_write_old_read_compatibility, use_session(n, {}, 0, ioflags));
-
+		
 		if (!in_cache) {
 			ELLIPTICS_TEST_CASE(test_read_corrupted_json, use_session(n, {}, 0, ioflags));
 			ELLIPTICS_TEST_CASE(test_read_json_with_corrupted_data_part, use_session(n, {}, 0, ioflags));
@@ -1714,24 +2028,24 @@ bool register_tests(const nodes_data *setup) {
 			ELLIPTICS_TEST_CASE(test_read_data_part_with_corrupted_first_data, use_session(n, {}, 0, ioflags));
 			ELLIPTICS_TEST_CASE(test_read_data_part_with_corrupted_second_data, use_session(n, {}, 0, ioflags));
 		}
-
+		
 		ELLIPTICS_TEST_CASE(test_data_and_json_timestamp, use_session(n, {}, 0, ioflags));
-
+		
 		if (!in_cache) {
 			ELLIPTICS_TEST_CASE(test_write_plain_into_nonexistent_key, use_session(n, {}, 0, ioflags));
 			ELLIPTICS_TEST_CASE(test_write_plain_into_committed_key, use_session(n, {}, 0, ioflags));
 		}
-
+		
 		ELLIPTICS_TEST_CASE(test_write_cas, use_session(n, {}, 0, ioflags));
-
+		
 		ELLIPTICS_TEST_CASE(test_write_to_readonly_backend, use_session(n, {}, 0, ioflags), setup);
-
+		
 		// Test key remove with and without CAS timestamp
 		record.key = {in_cache ? "cache_remove_key" : "remove_key"};
 		for (uint32_t flags : {DNET_IO_FLAGS_CAS_TIMESTAMP, 0}) {
 			dnet_current_time(&record.timestamp);
 			ELLIPTICS_TEST_CASE(test_write, use_session(n, {}, 0, ioflags), record);
-
+		
 			// if test uses CAS timestamp, then key removal with older session timestamp
 			// must return -EBADFD
 			auto sess_timestamp = record.timestamp;
@@ -1739,12 +2053,12 @@ bool register_tests(const nodes_data *setup) {
 			int expected_status = (flags == 0) ? 0 : -EBADFD;
 			ELLIPTICS_TEST_CASE(test_remove, use_session(n, {}, 0, ioflags | flags),
 					    sess_timestamp, record, expected_status);
-
+		
 			sess_timestamp = record.timestamp;
 			expected_status = (flags == 0) ? -ENOENT : 0;
 			ELLIPTICS_TEST_CASE(test_remove, use_session(n, {}, 0, ioflags | flags),
 					    sess_timestamp, record, expected_status);
-
+		
 			if (!in_cache) {
 				ELLIPTICS_TEST_CASE(test_remove_corrupted, use_session(n, {}, 0, ioflags | flags));
 			}

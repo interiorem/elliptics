@@ -43,6 +43,7 @@
 #include "rapidjson/stringbuffer.h"
 
 
+
 // Checks for broken headers signature(s).
 int blob_check_corrupted_stamp(void *buffer, size_t buffer_size) {
 	// Should be `assert`, but as __func__ is public (mostly for testing),
@@ -1925,16 +1926,19 @@ int blob_bulk_remove_new(struct eblob_backend_config *config,
 		return -EINVAL;
 	}
 
+	DNET_LOG_INFO(config->blog, "{}: EBLOB: {}: BULK_REMOVE_NEW: start for backend_id: {} ",
+		dnet_dump_id(&cmd->id), __func__, backend_id);
+
 	eblob_backend *b = config->eblob;
 
 	cmd->flags &= ~DNET_FLAGS_NEED_ACK;
-	struct dnet_cmd cmd_copy(*cmd);
-	cmd_copy.backend_id = backend_id;
 
 	const size_t num_keys = bulk_request.keys.size();
 	int err = 0;
 	for (size_t i = 0; i < num_keys; ++i)
 	{	
+		struct dnet_cmd cmd_copy(*cmd);
+		cmd_copy.backend_id = backend_id;
 		cmd_copy.id = bulk_request.keys[i];
 
 		struct eblob_key key;
@@ -1943,11 +1947,9 @@ int blob_bulk_remove_new(struct eblob_backend_config *config,
 			dnet_oplock_guard oplock_guard{ pool, &cmd_copy.id };
 			err = eblob_remove(b, &key);
 		}
-
 		cmd_copy.status = err;
 		const bool last_read = i >= (num_keys - 1);
-		dnet_send_reply(st, &cmd_copy, nullptr, 0, last_read, /*context*/ nullptr);
+		dnet_send_reply(st, &cmd_copy, nullptr, 0, last_read ? 0 : 1, /*context*/ nullptr);
 	}
-	 
 	return 0;
 }

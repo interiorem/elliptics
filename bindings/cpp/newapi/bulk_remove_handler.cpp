@@ -25,12 +25,12 @@ void single_bulk_remove_handler::start(const transport_control &control, const d
 		dnet_cmd_string(control.get_native().cmd), dnet_addr_string(&m_address),
 		request.keys.size());
 
-	auto rr = async_result_cast<remove_result_entry>(m_session, send_to_single_state(m_session, control));
-	m_handler.set_total(rr.total());
-
 	m_keys.assign(request.keys.begin(), request.keys.end());
 	std::sort(m_keys.begin(), m_keys.end());
 	m_key_responses.resize(m_keys.size(), false);
+
+	auto rr = async_result_cast<remove_result_entry>(m_session, send_to_single_state(m_session, control));
+	m_handler.set_total(rr.total());
 
 	rr.connect(
 		std::bind(&single_bulk_remove_handler::process, shared_from_this(), std::placeholders::_1),
@@ -39,13 +39,14 @@ void single_bulk_remove_handler::start(const transport_control &control, const d
 }
 
 void single_bulk_remove_handler::process(const remove_result_entry &entry) {
-	auto cmd = entry.command();
 
+	auto cmd = entry.command();
 	if (!entry.is_valid()) {
 		DNET_LOG_ERROR(m_log, "{}: {}: process: invalid response, status: {}",
 			dnet_dump_id(&cmd->id), dnet_cmd_string(cmd->cmd), cmd->status);
 		return;
 	}
+
 	// mark responsed key
 	bool found = false;
 	for (auto it = std::lower_bound(m_keys.begin(), m_keys.end(), cmd->id); it != m_keys.end(); ++it) {
@@ -53,12 +54,10 @@ void single_bulk_remove_handler::process(const remove_result_entry &entry) {
 			break;
 
 		const auto index = std::distance(m_keys.begin(), it);
-
 		if (m_key_responses[index])
 			continue;
 
 		m_handler.process(entry);
-
 		m_key_responses[index] = true;
 		found = true;
 		break;

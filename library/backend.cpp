@@ -933,6 +933,7 @@ public:
 
 private:
 	void process(uint32_t backend_id, const ioremap::elliptics::callback_result_entry &entry) {
+
 		const auto entry_cmd = entry.command();
 		if (entry_cmd->status == 0) {
 			dnet_cmd cmd(m_orig_cmd);
@@ -957,8 +958,7 @@ private:
 		for (size_t i = m_num_backend_responses[backend_id]; i < keys.size(); ++i) {
 			send_fail_reply(keys[i], backend_id, error.code());
 		}
-		
-		DNET_LOG_NOTICE(m_node, "{}: local: complete: status: {}", dnet_cmd_string(DNET_CMD_BULK_REMOVE_NEW),
+		DNET_LOG_NOTICE(m_node, "{}: local: complete for bacend_id {}: status: {}", backend_id, dnet_cmd_string(DNET_CMD_BULK_REMOVE_NEW),
 			error.code());
 	}
 
@@ -972,8 +972,7 @@ private:
 	}
 	
 	void send_reply(struct dnet_cmd &cmd) {
-		std::lock_guard<std::mutex> gurad(m_mutex);
-	
+		std::lock_guard<std::mutex> gurad(m_mutex);	
 		const int more = --m_total > 0 ? 1 : 0;
 		dnet_send_reply(m_state.get(), &cmd, nullptr, 0, more, /*context*/ nullptr);
 	}
@@ -991,6 +990,7 @@ private:
 
 int dnet_cmd_bulk_remove_new(struct dnet_net_state *st, struct dnet_cmd *cmd, 
 			     void *data, dnet_access_context *context) {
+	using namespace ioremap::elliptics;
 	if (cmd->backend_id >= 0) {
 		return -ENOTSUP;
 	}
@@ -998,8 +998,6 @@ int dnet_cmd_bulk_remove_new(struct dnet_net_state *st, struct dnet_cmd *cmd,
 	if (!st || !st->n || !st->n->addrs || !data) {
 		return -EINVAL;
 	}
-
-	using namespace ioremap::elliptics;
 
 	dnet_bulk_remove_request request;
 	deserialize(data_pointer::from_raw(data, cmd->size), request);

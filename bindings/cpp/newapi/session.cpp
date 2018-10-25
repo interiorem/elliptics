@@ -1528,6 +1528,7 @@ async_read_result session::bulk_read(const std::vector<dnet_id> &keys) {
 }
 
 async_remove_result send_bulk_remove(session &session, const std::vector<dnet_id> &keys) {
+
 	trace_scope scope{ session }; 
 
 	async_remove_result result(session);
@@ -1549,12 +1550,14 @@ async_remove_result session::bulk_remove(const std::vector<dnet_raw_id> &keys) {
 	struct dnet_id tmp;
 	memset(&tmp, 0, sizeof(struct dnet_id));
 
-	for (const auto g : groups)
+	for (const auto g : groups) {
 		for (const auto& key : keys)
 		{
 			dnet_setup_id(&tmp, static_cast<unsigned int>(g), key.id);
 			group_keys.push_back(tmp);
 		}
+	}
+
 
 	return bulk_remove(group_keys);
 }
