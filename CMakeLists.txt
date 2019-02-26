@@ -150,6 +150,7 @@ add_subdirectory(bindings)
 add_subdirectory(monitor)
 add_subdirectory(tests)
 add_subdirectory(example)
+add_subdirectory(grpc)
 
 install(FILES
         include/elliptics/core.h
