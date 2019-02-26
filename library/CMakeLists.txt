@@ -14,8 +14,11 @@ set(ELLIPTICS_SRCS
     ../example/backends.c
     ../example/eblob_backend.cpp
     ../example/eblob_backend.c
-    ../grpc/grpc_server.cpp
     ../grpc/elliptics_generated_wrapper.cpp
+    ../grpc/grpc_server.cpp
+    ../grpc/read_request.cpp
+    ../grpc/requests_common.cpp
+    ../grpc/write_request.cpp
     )
 
 add_library(elliptics_ids STATIC ids.cpp)
