@@ -1,3 +1,8 @@
+include_directories(
+    ${PROJECT_BINARY_DIR}
+    ${PROJECT_SOURCE_DIR}/foreign/flatbuffers/include
+)
+
 set(ELLIPTICS_SRCS
     dnet.c
     notify.c
@@ -10,7 +15,7 @@ set(ELLIPTICS_SRCS
     ../example/eblob_backend.cpp
     ../example/eblob_backend.c
     ../grpc/grpc_server.cpp
-    ../grpc/elliptics.grpc.fb.cc
+    ../grpc/elliptics_generated_wrapper.cpp
     )
 
 add_library(elliptics_ids STATIC ids.cpp)
@@ -36,6 +41,9 @@ target_link_libraries(elliptics
     gpr
     grpc
     grpc++
+    )
+add_dependencies(elliptics
+    generate-from-schema
     )
 
 install(TARGETS elliptics
