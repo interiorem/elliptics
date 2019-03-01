@@ -36,6 +36,7 @@
 #include "elliptics.h"
 #include "elliptics/packet.h"
 #include "elliptics/interface.h"
+#include "n2_protocol.h"
 
 #include "monitor/measure_points.h"
 #include "library/logger.hpp"
@@ -330,12 +331,15 @@ err_out_exit:
 
 void dnet_io_req_free(struct dnet_io_req *r)
 {
+	n2_message_free(r->n2_msg);
+
 	if (r->fd >= 0 && r->fsize) {
 		if (r->on_exit & DNET_IO_REQ_FLAGS_CACHE_FORGET)
 			posix_fadvise(r->fd, r->local_offset, r->fsize, POSIX_FADV_DONTNEED);
 		if (r->on_exit & DNET_IO_REQ_FLAGS_CLOSE)
 			close(r->fd);
 	}
+
 	dnet_access_access_put(r->context);
 	free(r);
 }

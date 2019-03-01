@@ -58,28 +58,31 @@ struct dnet_group;
 struct dnet_net_state;
 struct dnet_cmd_stats;
 struct dnet_access_context;
+struct n2_message;
 
 struct dnet_io_req {
-	struct list_head	req_entry;
+	struct list_head		req_entry;
 
-	struct dnet_net_state	*st;
+	struct dnet_net_state		*st;
+	struct n2_message		*n2_msg;
 
-	void			*header;
-	size_t			hsize;
+	// TODO: remove deprecated fields after refactoring complete
+	void				*header; /*Deprecated*/
+	size_t				hsize; /*Deprecated*/
 
-	void			*data;
-	size_t			dsize;
+	void				*data; /*Deprecated*/
+	size_t				dsize; /*Deprecated*/
 
-	int			on_exit;
-	int			fd;
-	off_t			local_offset;
-	size_t			fsize;
+	int				on_exit; /*Deprecated*/
+	int				fd; /*Deprecated*/
+	off_t				local_offset; /*Deprecated*/
+	size_t				fsize; /*Deprecated*/
 
-	struct timespec		queue_start_ts;
-	uint64_t		queue_time;
-	uint64_t		recv_time;
+	struct timespec			queue_start_ts;
+	uint64_t			queue_time;
+	uint64_t			recv_time;
 
-	struct dnet_access_context *context;
+	struct dnet_access_context 	*context;
 };
 
 #define ELLIPTICS_PROTOCOL_VERSION_0 2
