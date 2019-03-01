@@ -28,3 +28,7 @@ struct dnet_work_pool_place *dnet_backend_get_place(struct dnet_node *node, ssiz
 	pthread_mutex_lock(&place->lock);
 	return place;
 }
+
+std::string describe_errc(int errc) {
+	return std::string(strerror(-errc)) + " (" + std::to_string(errc) + ")";
+}

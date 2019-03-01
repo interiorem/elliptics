@@ -13,21 +13,25 @@ struct data_in_file {
 	off_t local_offset = 0;
 	size_t fsize = 0;
 	int on_exit = 0;
+
+	void detach();
+	data_pointer read_and_detach();
 };
 
 struct data_place {
+	data_in_file in_file;
+	data_pointer in_memory;
+
 	enum place_type {
 		IN_MEMORY,
 		IN_FILE,
 	};
-
-	data_in_file in_file;
-	data_pointer in_memory;
-
 	place_type where() const;
 
-	static data_place from_file(const data_in_file &in_file);
-	static data_place from_memory(const data_pointer &in_memory);
+	void force_memory();
+
+	static data_place from_file(data_in_file in_file);
+	static data_place from_memory(data_pointer in_memory);
 };
 
 struct message {
@@ -37,12 +41,43 @@ struct message {
 	virtual ~message() = default;
 };
 
+class call {
+public:
+	/*
+	 * To call on client side
+	 */
+
+	// must be called once, otherwise std::logic_error thrown
+	virtual void request(std::unique_ptr<message> msg) = 0;
+
+	// must be called once, otherwise std::logic_error thrown
+	virtual std::unique_ptr<message> get_reply() = 0;
+
+	virtual int get_reply_error() = 0;
+
+	/*
+	 * To call on server side
+	 */
+
+	// must be called once, otherwise std::logic_error thrown
+	virtual std::unique_ptr<message> get_request() = 0;
+
+	// reply or reply_error (only one of them) must be called once, otherwise std::logic_error thrown
+	virtual void reply(std::unique_ptr<message> msg) = 0;
+	virtual void reply_error(int errc) = 0;
+
+	virtual ~call() = default;
+};
+
+int send_response(struct dnet_net_state *st, call *c, message *msg, struct dnet_access_context *context);
+
 }}} // namespace ioremap::elliptics::n2
 
 // All requests/responses must be inherited from n2_message;
 // common_request is visible from dnet_io_req. Since this struct
 // is visible from C code, it is declared out of namespace.
 struct n2_message : ioremap::elliptics::n2::message {};
+struct n2_call : public ioremap::elliptics::n2::call {};
 
 namespace ioremap { namespace elliptics { namespace n2 {
 
@@ -73,7 +108,7 @@ struct read_response : n2_message {
 	uint64_t read_data_size;
 	data_place data;
 
-	virtual void make_owning() override { /*TODO(sabramkin): implement*/ }
+	void make_owning() override;
 };
 
 struct write_request : n2_message {

@@ -64,7 +64,6 @@ struct dnet_io_req {
 	struct list_head		req_entry;
 
 	struct dnet_net_state		*st;
-	struct n2_message		*n2_msg;
 
 	// TODO: remove deprecated fields after refactoring complete
 	void				*header; /*Deprecated*/
@@ -83,6 +82,8 @@ struct dnet_io_req {
 	uint64_t			recv_time;
 
 	struct dnet_access_context 	*context;
+
+	struct n2_call			*call_data;
 };
 
 #define ELLIPTICS_PROTOCOL_VERSION_0 2
@@ -655,6 +656,11 @@ int __attribute__((weak)) dnet_process_cmd_raw(struct dnet_net_state *st,
                                                int recursive,
                                                long queue_time,
                                                struct dnet_access_context *context);
+int __attribute__((weak)) n2_process_cmd_raw(struct dnet_net_state *st,
+                                             struct n2_call *call_data,
+                                             int recursive,
+                                             long queue_time,
+                                             struct dnet_access_context *context);
 int dnet_process_recv(struct dnet_net_state *st, struct dnet_io_req *r);
 void dnet_trans_update_timestamp(struct dnet_trans *t);
 

@@ -32,8 +32,9 @@
 #include <errno.h>
 #include <string.h>
 
-#include "elliptics.h"
 #include "backend.h"
+#include "elliptics.h"
+#include "n2_protocol.h"
 #include "request_queue.h"
 #include "route.h"
 #include "monitor/monitor.h"
@@ -1749,6 +1750,140 @@ int dnet_process_cmd_raw(struct dnet_net_state *st,
 	HANDY_COUNTER_INCREMENT(("io.cmd%s.%s.%d", (recursive ? "_recursive" : ""), dnet_cmd_string(cmd->cmd), err), 1);
 
 	err = dnet_send_ack(st, cmd, err, recursive, context);
+
+	dnet_stat_inc(st->stat, cmd->cmd, err);
+	if (st->__join_state == DNET_JOIN)
+		dnet_counter_inc(n, cmd->cmd, err);
+	else
+		dnet_counter_inc(n, cmd->cmd + __DNET_CMD_MAX, err);
+	return err;
+}
+
+// Keep this enums in sync with enums from dnet_cmd_needs_backend
+static int n2_process_cmd_without_backend_raw(struct dnet_net_state *st,
+                                              struct n2_call *call_data,
+                                              struct n2_message *msg,
+                                              struct dnet_cmd_stats *cmd_stats,
+                                              struct dnet_access_context *context) {
+	// TODO(sabramkin)
+	return -ENOTSUP;
+}
+
+static int n2_process_cmd_with_backend_raw(struct dnet_net_state *st,
+                                           struct n2_call *call_data,
+                                           struct n2_message *msg,
+                                           struct dnet_cmd_stats *cmd_stats __attribute__((unused)),
+                                           struct dnet_access_context *context) {
+	int err = 0;
+	struct dnet_node *n = st->n;
+	struct dnet_io_attr *io = NULL;
+	struct timespec start, end;
+	struct dnet_backend *backend = NULL;
+	struct dnet_cmd *cmd = n2_message_access_cmd(msg);
+
+	// filter supported commands
+	switch (cmd->cmd) {
+	case DNET_CMD_READ_NEW:
+	case DNET_CMD_WRITE_NEW:
+		break;
+	default:
+		return -ENOTSUP;
+	}
+
+	clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+
+	backend = dnet_backends_get_backend_locked(n, cmd->backend_id);
+	if (!backend)
+		return -ENOTSUP;
+
+	// sleep before running a command, since for some commands ->command_handler sends reply itself,
+	// and client will not wait for this thread to finish
+	dnet_backend_sleep_delay(backend);
+
+	if ((cmd->cmd == DNET_CMD_WRITE_NEW) && (n->ro || dnet_backend_read_only(backend))) {
+		err = -EROFS;
+	}
+
+	if (!err) {
+		err = n2_cmd_cache_io(backend, st, call_data, msg, cmd_stats, context);
+		if (err == -ENOTSUP) {
+			cmd->flags &= ~DNET_FLAGS_NEED_ACK;
+			err = n2_backend_process_cmd_raw(backend, st, call_data, msg, cmd_stats, context);
+		}
+	}
+
+	clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+	cmd_stats->handle_time = DIFF_TIMESPEC(start, end);
+
+	/* If there was any error - send ACK to notify client with error code and destroy transaction */
+	if (err)
+		cmd->flags |= DNET_FLAGS_NEED_ACK;
+
+	if (io) {
+		// TODO(shaitan): it should be set by corresponding handler
+		// when all handlers will accept and update @cmd_stats.
+		cmd_stats->size = io->size;
+
+		// do not count error read size
+		// otherwise it leads to HUGE read traffic stats, although nothing was actually read
+		if (cmd->cmd == DNET_CMD_READ && err < 0)
+			cmd_stats->size = 0;
+	}
+
+	dnet_backend_command_stats_update(backend, cmd, cmd_stats->size, cmd_stats->handled_in_cache, err,
+	                                  cmd_stats->handle_time);
+
+	dnet_backend_unlock_state(backend);
+	return err;
+}
+
+int n2_process_cmd_raw(struct dnet_net_state *st,
+                       struct n2_call *call_data,
+                       int recursive,
+                       const long queue_time,
+                       struct dnet_access_context *context) {
+	int err = 0;
+	struct dnet_node *n = st->n;
+	struct n2_message *msg;
+	struct dnet_cmd *cmd = n2_message_access_cmd(msg);
+	const unsigned long long tid = cmd->trans;
+	struct timespec start, end;
+	struct dnet_cmd_stats cmd_stats;
+
+	err = n2_call_get_request(n, call_data, &msg);
+	if (err)
+		return err;
+
+	memset(&cmd_stats, 0, sizeof(cmd_stats));
+	cmd_stats.queue_time = queue_time;
+
+	HANDY_TIMER_SCOPE(recursive ? "io.cmd_recursive" : "io.cmd");
+	HANDY_TIMER_SCOPE(("io.cmd%s.%s", (recursive ? "_recursive" : ""), dnet_cmd_string(cmd->cmd)));
+
+	clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+
+	err = n2_process_cmd_without_backend_raw(st, call_data, msg, &cmd_stats, context);
+	if (err == -ENOTSUP)
+		err = n2_process_cmd_with_backend_raw(st, call_data, msg, &cmd_stats, context);
+
+	clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+	cmd_stats.handle_time = DIFF_TIMESPEC(start, end);
+
+	dnet_log(n, DNET_LOG_INFO,
+	         "%s: %s: client: %s, trans: %llu, cflags: %s, time: %ld usecs, queue_time: %ld usecs, err: %d.",
+	         dnet_dump_id(&cmd->id), dnet_cmd_string(cmd->cmd), dnet_state_dump_addr(st),
+	         tid, dnet_flags_dump_cflags(cmd->flags), cmd_stats.handle_time, queue_time, err);
+
+	dnet_access_context_add_int(context, "status", err);
+
+	// we must provide real error from the backend into statistics
+	dnet_monitor_stats_update(n, cmd, err, cmd_stats.handled_in_cache, cmd_stats.size, cmd_stats.handle_time);
+
+	HANDY_COUNTER_INCREMENT(
+	("io.cmd%s.%d.%s.%d", (recursive ? "_recursive" : ""), cmd->backend_id, dnet_cmd_string(cmd->cmd), err), 1);
+	HANDY_COUNTER_INCREMENT(("io.cmd%s.%s.%d", (recursive ? "_recursive" : ""), dnet_cmd_string(cmd->cmd), err), 1);
+
+	err = n2_send_error(st, call_data, err, context); // TODO(sabramkin): pass 'recursive'
 
 	dnet_stat_inc(st->stat, cmd->cmd, err);
 	if (st->__join_state == DNET_JOIN)

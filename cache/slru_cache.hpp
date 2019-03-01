@@ -40,6 +40,11 @@ public:
 	                       const write_request &request,
 	                       dnet_access_context *context);
 
+	write_response_t n2_write(dnet_net_state *st,
+	                          ioremap::elliptics::n2::call *call,
+	                          ioremap::elliptics::n2::write_request *request,
+	                          dnet_access_context *context);
+
 	read_response_t read(const unsigned char *id, uint64_t ioflags);
 
 	int remove(const dnet_cmd *cmd, ioremap::elliptics::dnet_remove_request &request, dnet_access_context *context);
@@ -81,6 +86,8 @@ private:
 	}
 
 	int check_cas(const data_t* it, const dnet_cmd *cmd, const write_request &request) const;
+
+	int n2_check_cas(const data_t *it, const ioremap::elliptics::n2::write_request *request) const;
 
 	void sync_if_required(data_t* it, elliptics_unique_lock<std::mutex> &guard);
 

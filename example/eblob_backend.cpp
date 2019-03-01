@@ -108,7 +108,7 @@ int blob_read_and_check_stamp(const eblob_backend_config *c,
 	return err;
 }
 
-static int dnet_get_filename(int fd, std::string &filename) {
+int dnet_get_filename(int fd, std::string &filename) {
 	char *name = nullptr;
 	if (const int err = dnet_fd_readlink(fd, &name) < 0)
 		return err;
@@ -185,9 +185,9 @@ int dnet_read_json_header(int fd, uint64_t offset, uint64_t size, dnet_json_head
 	return 0;
 }
 
-static int blob_read_and_check_flags_new(const eblob_backend_config *c,
-                                         eblob_key *key,
-                                         eblob_write_control *wc) {
+int blob_read_and_check_flags_new(const eblob_backend_config *c,
+                                  eblob_key *key,
+                                  eblob_write_control *wc) {
 	int err = eblob_read_return(c->eblob, key, EBLOB_READ_NOCSUM, wc);
 	if (err == 0 && wc->flags & BLOB_DISK_CTL_CORRUPTED) {
 		err = -EILSEQ;

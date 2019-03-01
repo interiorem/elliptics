@@ -247,6 +247,220 @@ write_response_t slru_cache_t::write(dnet_net_state *st,
 	return write_response_t{write_status::HANDLED_IN_CACHE, 0, it->get_cache_item()};
 }
 
+write_response_t slru_cache_t::n2_write(dnet_net_state *st,
+                                        ioremap::elliptics::n2::call *call,
+                                        ioremap::elliptics::n2::write_request *request,
+                                        dnet_access_context *context) {
+	TIMER_SCOPE("write");
+
+	auto &cmd = request->cmd;
+
+	const auto id = cmd.id.id;
+	const bool remove_from_disk = (request->ioflags & DNET_IO_FLAGS_CACHE_REMOVE_FROM_DISK);
+	const bool cache = (request->ioflags & DNET_IO_FLAGS_CACHE);
+	const bool cache_only = (request->ioflags & DNET_IO_FLAGS_CACHE_ONLY);
+	const bool append = (request->ioflags & DNET_IO_FLAGS_APPEND);
+	const bool update_data = (request->ioflags & DNET_IO_FLAGS_PREPARE) || request->data.size();
+	const bool update_json = (request->ioflags & (DNET_IO_FLAGS_PREPARE | DNET_IO_FLAGS_UPDATE_JSON)) ||
+	                         request->json.size();
+
+	TIMER_START("write.lock");
+	elliptics_unique_lock<std::mutex> guard(m_lock, m_node, "%s: CACHE WRITE: %p", dnet_dump_id_str(id), this);
+	TIMER_STOP("write.lock");
+
+	TIMER_START("write.find");
+	data_t* it = m_treap.find(id);
+	TIMER_STOP("write.find");
+
+	if (!it && !cache) {
+		DNET_LOG_DEBUG(m_node, "{}: CACHE: not a cache call", dnet_dump_id_str(id));
+		return write_response_t{write_status::ERROR, -ENOTSUP, cache_item()};
+	}
+
+	if (!cache_only && !append && it && it->only_append()) {
+		TIMER_SCOPE("write.after_append_only");
+
+		sync_after_append(guard, false, &*it);
+
+		dnet_cmd_stats stats;
+		const auto &callbacks = m_backend.callbacks();
+		int err = callbacks.n2_command_handler(st,
+		                                       callbacks.command_private,
+		                                       static_cast<n2_call *>(call),
+		                                       request,
+		                                       &stats,
+		                                       context);
+
+		it = populate_from_disk(guard, id, false, &err);
+
+		return write_response_t{write_status::HANDLED_IN_BACKEND, err, it->get_cache_item()};
+	}
+
+	bool new_page = false;
+
+	if (!it) {
+		// If file not found and CACHE_ONLY flag is not set - fallback to backend request
+		if (!cache_only && request->data_offset != 0) {
+			int err = 0;
+			it = populate_from_disk(guard, id, remove_from_disk, &err);
+			new_page = true;
+
+			if (err != 0 && err != -ENOENT)
+				return write_response_t{write_status::ERROR, err, cache_item()};
+		}
+
+		// Create empty data for code simplifying
+		if (!it) {
+			it = create_data(id, ioremap::elliptics::data_pointer{}, ioremap::elliptics::data_pointer{},
+			                 remove_from_disk && !append);
+			new_page = true;
+			if (append) {
+				it->set_only_append(true);
+			}
+		}
+	}
+
+	int err = n2_check_cas(it, request);
+	if (err)
+		return write_response_t{write_status::ERROR, err, cache_item()};
+
+	DNET_LOG_DEBUG(m_node, "{}: CACHE: CAS checked", dnet_dump_id_str(id));
+
+	auto raw = it->data();
+
+	const size_t new_json_size = [&] () -> size_t {
+		if (update_json) {
+			return request->json.size();
+		} else {
+			return it->json()->size();
+		}
+	} ();
+
+	const size_t new_data_size = [&] () -> size_t {
+		if (!update_data) {
+			return raw->size();
+		} else if (append) {
+			return raw->size() + request->data.size();
+		} else {
+			return request->data_offset + request->data.size();
+		}
+	} ();
+
+	const size_t new_size = new_data_size + new_json_size + it->overhead_size();
+
+	const size_t page_number = it->cache_page_number();
+	size_t new_page_number = page_number;
+
+	if (!new_page) {
+		new_page_number = get_next_page_number(page_number);
+	}
+
+	remove_data_from_page(id, page_number, &*it);
+	resize_page(id, new_page_number, 2 * new_size);
+
+	if (it->remove_from_cache()) {
+		m_cache_stats.size_of_objects_marked_for_deletion -= it->size();
+	}
+	m_cache_stats.size_of_objects -= it->size();
+
+	TIMER_START("write.modify");
+	if (update_json) {
+		if (request->json.size()) {
+			it->json()->assign(reinterpret_cast<char *>(request->json.data()), request->json.size());
+		} else {
+			it->json()->clear();
+		}
+
+		if (cmd.cmd == DNET_CMD_WRITE_NEW) {
+			it->set_json_timestamp(request->json_timestamp);
+		} else {
+			it->clear_json_timestamp();
+		}
+	}
+
+	if (update_data) {
+		if (append) {
+			raw->append(reinterpret_cast<char *>(request->data.data()), request->data.size());
+		} else {
+			raw->resize(new_data_size);
+			raw->replace(request->data_offset, std::string::npos,
+				     reinterpret_cast<char *>(request->data.data()), request->data.size());
+		}
+	}
+	TIMER_STOP("write.modify");
+	m_cache_stats.size_of_objects += it->size();
+
+	it->set_remove_from_cache(false);
+	insert_data_into_page(id, new_page_number, &*it);
+
+	// Mark data as dirty one, so it will be synced to the disk
+
+	const size_t previous_eventtime = it->eventtime();
+	const size_t current_time = time(nullptr);
+
+	if (!it->synctime() && !cache_only) {
+		it->set_synctime(current_time + m_sync_timeout);
+	}
+
+	if (request->cache_lifetime) {
+		it->set_lifetime(current_time + request->cache_lifetime);
+	}
+
+	if (previous_eventtime != it->eventtime()) {
+		TIMER_SCOPE("write.decrease_key");
+		m_treap.decrease_key(it);
+	}
+
+	if (update_data) {
+		it->set_timestamp(request->data_timestamp);
+		it->set_user_flags(request->user_flags);
+	}
+
+	return write_response_t{write_status::HANDLED_IN_CACHE, 0, it->get_cache_item()};
+}
+
+int slru_cache_t::n2_check_cas(const data_t *it, const ioremap::elliptics::n2::write_request *request) const {
+	auto cmd = &request->cmd;
+
+	if (request->ioflags & DNET_IO_FLAGS_COMPARE_AND_SWAP) {
+		return -ENOTSUP;
+	}
+
+	if (request->ioflags & DNET_IO_FLAGS_CAS_TIMESTAMP) {
+		TIMER_SCOPE("write.cas_timestamp");
+
+		if (!it->data()->empty()) {
+			auto cache_ts = it->timestamp();
+
+			// cache timestamp is greater than timestamp of the data to be written
+			// do not allow it
+			if (dnet_time_cmp(&cache_ts, &request->data_timestamp) > 0) {
+				const std::string cache_ts_string = dnet_print_time(&cache_ts);
+				const std::string request_ts_string = dnet_print_time(&request->data_timestamp);
+				DNET_LOG_ERROR(m_node, "{}: cas: cache data timestamp is greater than data to be "
+				                       "written timestamp: cache-ts: '{}', data-ts: '{}'",
+				               dnet_dump_id(&cmd->id), cache_ts_string, request_ts_string);
+				return -EBADFD;
+			}
+		}
+
+		if (!it->json()->empty()) {
+			auto cache_ts = it->json_timestamp();
+
+			if (dnet_time_cmp(&cache_ts, &request->json_timestamp) > 0) {
+				const std::string cache_ts_string = dnet_print_time(&cache_ts);
+				const std::string request_ts_string = dnet_print_time(&request->json_timestamp);
+				DNET_LOG_ERROR(m_node, "{}: cas: cache json timestamp is greater than data to be "
+				                       "written timestamp: cache-ts: '{}', data-ts: '{}'",
+				               dnet_dump_id(&cmd->id), cache_ts_string, request_ts_string);
+				return -EBADFD;
+			}
+		}
+	}
+
+	return 0;
+}
+
 read_response_t slru_cache_t::read(const unsigned char *id, uint64_t ioflags) {
 	TIMER_SCOPE("read");
 

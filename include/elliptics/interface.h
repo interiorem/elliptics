@@ -55,6 +55,8 @@ struct dnet_net_state;
 struct dnet_config_data;
 struct dnet_node;
 struct dnet_session;
+struct n2_call;
+struct n2_message;
 
 int dnet_need_exit(struct dnet_node *n);
 void dnet_set_need_exit(struct dnet_node *n);
@@ -306,6 +308,14 @@ struct dnet_backend_callbacks {
 	char *			(* dir)(void);
 
 	int			(* lookup)(struct dnet_node *n, void *priv, struct dnet_io_local *io);
+
+	/* command handler processes DNET_CMD_* commands protocol-undependently */
+	int			(* n2_command_handler)(void *state,
+	                                               void *priv,
+	                                               struct n2_call *call_data,
+	                                               struct n2_message *msg,
+	                                               void *cmd_stats,
+	                                               struct dnet_access_context *context);
 };
 
 /*
@@ -905,6 +915,16 @@ int dnet_send_reply_threshold(void *state, struct dnet_cmd *cmd,
 
 int dnet_send_fd_threshold(struct dnet_net_state *st, void *header, uint64_t hsize,
                            int fd, uint64_t offset, uint64_t dsize);
+
+int n2_send_response(struct dnet_net_state *st,
+                     struct n2_call *call_data,
+                     struct n2_message *msg,
+                     struct dnet_access_context *context);
+
+int n2_send_error(struct dnet_net_state *st,
+                  struct n2_call *call_data,
+                  int errc,
+                  struct dnet_access_context *context);
 
 struct dnet_route_entry
 {

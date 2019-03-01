@@ -41,7 +41,6 @@
 #include "monitor/measure_points.h"
 #include "library/logger.hpp"
 #include "tests.h"
-#include "access_context.h"
 
 #ifndef POLLRDHUP
 #define POLLRDHUP 0x2000
@@ -331,7 +330,7 @@ err_out_exit:
 
 void dnet_io_req_free(struct dnet_io_req *r)
 {
-	n2_message_free(r->n2_msg);
+	n2_call_free(r->call_data);
 
 	if (r->fd >= 0 && r->fsize) {
 		if (r->on_exit & DNET_IO_REQ_FLAGS_CACHE_FORGET)
@@ -737,7 +736,10 @@ int dnet_process_recv(struct dnet_net_state *st, struct dnet_io_req *r) {
 
 		dnet_access_context_add_string(context, "access", "server");
 		HANDY_COUNTER_INCREMENT("io.cmds", 1);
-		err = dnet_process_cmd_raw(st, cmd, r->data, 0, r->queue_time, context);
+
+		err = r->call_data
+			? n2_process_cmd_raw(st, r->call_data, 0, r->queue_time, context)
+			: dnet_process_cmd_raw(st, cmd, r->data, 0, r->queue_time, context);
 	} else {
 		dnet_access_context_add_string(context, "access", "server/forward");
 		dnet_access_context_add_string(context, "forward", dnet_state_dump_addr(forward_state));

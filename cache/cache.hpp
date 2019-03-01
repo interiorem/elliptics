@@ -27,6 +27,7 @@
 #include <boost/intrusive/list.hpp>
 
 #include "library/logger.hpp"  //TODO: remove from header file, required only by elliptics_unique_lock
+#include "library/n2_protocol.hpp"
 
 #include "bindings/cpp/timer.hpp"
 
@@ -413,6 +414,11 @@ public:
 	                       dnet_cmd *cmd,
 	                       const write_request &request,
 	                       dnet_access_context *context);
+
+	write_response_t n2_write(dnet_net_state *st,
+	                          ioremap::elliptics::n2::call *call,
+	                          ioremap::elliptics::n2::write_request *request,
+	                          dnet_access_context *context);
 
 	read_response_t read(const unsigned char *id, uint64_t ioflags);
 

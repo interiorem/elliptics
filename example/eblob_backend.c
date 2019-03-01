@@ -39,7 +39,6 @@
 #include <unistd.h>
 
 #include <eblob/blob.h>
-#include <library/access_context.h>
 
 #include "elliptics/packet.h"
 #include "elliptics/interface.h"
@@ -51,8 +50,10 @@
 
 #include "example/eblob_backend.h"
 
+#include "library/access_context.h"
 #include "library/elliptics.h"
 #include "library/logger.hpp"
+#include "library/n2_protocol.h"
 
 /*
  * FIXME: __unused is used internally by glibc, so it may cause conflicts.
@@ -1273,6 +1274,16 @@ static int eblob_backend_command_handler(void *state,
 	return err;
 }
 
+static int n2_eblob_backend_command_handler(void *state,
+                                            void *priv,
+                                            struct n2_call *call_data,
+                                            struct n2_message *msg,
+                                            void *cmd_stats,
+                                            struct dnet_access_context *context) {
+	// TODO(sabramkin)
+	return -ENOTSUP;
+}
+
 static int dnet_blob_set_sync(struct dnet_config_backend *b,
                               const char *key __unused, const char *value)
 {
@@ -1613,6 +1624,7 @@ static int dnet_blob_config_init(struct dnet_config_backend *b, enum dnet_log_le
 
 	b->cb.command_private = c;
 	b->cb.command_handler = eblob_backend_command_handler;
+	b->cb.n2_command_handler = n2_eblob_backend_command_handler;
 	b->cb.backend_cleanup = eblob_backend_cleanup;
 	b->cb.checksum = eblob_backend_checksum;
 	b->cb.lookup = eblob_backend_lookup;
