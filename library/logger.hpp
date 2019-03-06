@@ -156,6 +156,8 @@ namespace ioremap { namespace elliptics {
 template<class T> inline auto logger_ref(T* const log) -> T& { return *log; }
 template<class T> inline auto logger_ref(const std::unique_ptr<T>& log) -> T& { return *log; }
 inline dnet_logger& logger_ref(struct dnet_node *node) { return *dnet_node_get_logger(node); }
+inline dnet_logger& logger_ref(struct dnet_node &node) { return *dnet_node_get_logger(&node); }
+
 
 template <class T> inline blackhole::logger_facade<dnet_logger> make_facade(T &&log) {
 	return blackhole::logger_facade<dnet_logger>(logger_ref(log));

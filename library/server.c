@@ -178,8 +178,6 @@ struct dnet_node *dnet_server_node_create(struct dnet_config_data *cfg_data)
 		}
 	}
 
-	dnet_start_grpc_server(n);
-
 	dnet_log(n, DNET_LOG_DEBUG, "New server node has been created at port %d", cfg->port);
 
 	pthread_sigmask(SIG_SETMASK, &previous_sigset, NULL);
@@ -208,8 +206,6 @@ err_out_exit:
 void dnet_server_node_destroy(struct dnet_node *n)
 {
 	dnet_log(n, DNET_LOG_DEBUG, "Destroying server node");
-
-	dnet_stop_grpc_server(n);
 
 	/*
 	 * Stop network and backend thread pools

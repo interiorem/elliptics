@@ -8,7 +8,6 @@ table Cmd {
     id:[uint8];
     group_id:uint32;
     status:int32;
-    cmd:int32; // TODO: remove this field
     backend_id:int32;
     trace_id:uint64;
     flags:uint64;
@@ -32,12 +31,12 @@ table WriteRequestHeader {
 
     json_size:uint64;
     json_capacity:uint64;
-    json_timestamp:uint64; // TODO: use struct Time
+    json_timestamp:Time;
 
     data_offset:uint64;
     data_size:uint64;
     data_capacity:uint64;
-    data_timestamp:uint64; // TODO: use struct Time
+    data_timestamp:Time;
     data_commit_size:uint64;
 
     cache_lifetime:uint64;
@@ -56,13 +55,13 @@ table LookupResponse {
     user_flags:uint64;
     path:string;
 
-    json_timestamp:uint64; // TODO: use struct Time
+    json_timestamp:Time;
     json_offset:uint64;
     json_size:uint64;
     json_capacity:uint64;
     json_checksum:[uint8];
 
-    data_timestamp:uint64; // TODO: use struct Time
+    data_timestamp:Time;
     data_offset:uint64;
     data_size:uint64;
     data_checksum:[uint8];
@@ -85,12 +84,12 @@ table ReadResponseHeader {
     record_flags:uint64;
     user_flags:uint64;
 
-    json_timestamp:uint64; // TODO: use struct Time
+    json_timestamp:Time;
     json_size:uint64;
     json_capacity:uint64;
     read_json_size:uint64;
 
-    data_timestamp:uint64; // TODO: use struct Time
+    data_timestamp:Time;
     data_size:uint64;
     read_data_offset:uint64;
     read_data_size:uint64;
