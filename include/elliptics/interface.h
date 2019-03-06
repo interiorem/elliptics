@@ -409,6 +409,9 @@ struct dnet_config
 
 	/* so that we do not change major version frequently */
 	int			reserved_for_future_use[8];
+
+	unsigned int            grpc_thread_num;
+	const char	        *grpc_address;
 };
 
 struct dnet_node *dnet_get_node_from_state(void *state);

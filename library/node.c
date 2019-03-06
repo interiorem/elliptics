@@ -27,6 +27,7 @@
 
 #include "elliptics.h"
 #include "elliptics/interface.h"
+#include "grpc/grpc.h"
 #include "monitor/monitor.h"
 #include "library/logger.hpp"
 
@@ -743,6 +744,12 @@ struct dnet_node *dnet_node_create(struct dnet_config *cfg)
 			cfg->net_thread_num = 8;
 	}
 
+	if (!cfg->grpc_thread_num) {
+		cfg->grpc_thread_num = 1;
+		if (cfg->flags & DNET_CFG_JOIN_NETWORK)
+			cfg->grpc_thread_num = 8;
+	}
+
 	n = dnet_node_alloc(cfg);
 	if (!n) {
 		err = -ENOMEM;
@@ -804,6 +811,10 @@ struct dnet_node *dnet_node_create(struct dnet_config *cfg)
 	if (err)
 		goto err_out_io_exit;
 
+	err = dnet_grpc_io_start(n, cfg->grpc_address, cfg->grpc_thread_num);
+	if (err)
+		goto err_out_io_exit;
+
 	DNET_DEBUG(n, "New node has been created");
 	pthread_sigmask(SIG_SETMASK, &previous_sigset, NULL);
 	return n;
@@ -838,6 +849,7 @@ void dnet_node_stop_common_resources(struct dnet_node *n)
 	dnet_set_need_exit(n);
 	dnet_iterator_cancel_all(n);
 	dnet_check_thread_stop(n);
+	dnet_grpc_io_stop(n);
 
 	dnet_io_stop(n);
 }
