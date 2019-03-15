@@ -32,7 +32,6 @@ private:
 	void push_request();
 	void send_response(std::unique_ptr<response_t> response);
 
-private:
 	::grpc::ServerContext ctx_;
 	::grpc::ServerAsyncReader<rpc_response_t, rpc_request_t> async_reader_;
 

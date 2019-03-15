@@ -32,7 +32,6 @@ private:
 	void send_response(std::unique_ptr<response_t> response);
 	void send_next(bool first);
 
-private:
 	::grpc::ServerContext ctx_;
 	::grpc::ServerAsyncWriter<rpc_response_t> async_writer_;
 
