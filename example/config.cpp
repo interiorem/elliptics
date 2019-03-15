@@ -34,6 +34,7 @@
 #include "common.h"
 
 #include "elliptics/session.hpp"
+#include "grpc/config.h"
 #include "library/backend.h"
 #include "library/logger.hpp"
 #include "monitor/monitor.hpp"
@@ -66,6 +67,7 @@ extern "C" void dnet_config_data_destroy(struct dnet_config_data *config) {
 	auto data = static_cast<config_data *>(config);
 
 	free(data->cfg_addrs);
+	delete data->cfg_grpc;
 
 	delete data;
 }
@@ -281,8 +283,6 @@ static void parse_options(config_data *data, const kora::config_t &options) {
 	data->cfg_state.removal_delay = options.at("removal_delay", 0);
 	data->cfg_state.server_prio = options.at("server_net_prio", 0);
 	data->cfg_state.client_prio = options.at("client_net_prio", 0);
-	data->cfg_state.grpc_address = options.at<const char *>("grpc_address");
-	data->cfg_state.grpc_thread_num = options.at<unsigned>("grpc_thread_num", 0);
 	data->parallel_start = options.at("parallel", true);
 	snprintf(data->cfg_state.cookie, DNET_AUTH_COOKIE_SIZE, "%s", options.at<std::string>("auth_cookie").c_str());
 
@@ -296,6 +296,9 @@ static void parse_options(config_data *data, const kora::config_t &options) {
 			DNET_LOG_ERROR(data->cfg_state.log, "Failed to add address to remotes: {}", e.what());
 		}
 	}
+
+	if (options.has("grpc"))
+		data->cfg_grpc = ioremap::grpc::parse_server_config(options["grpc"]).release();
 
 	if (options.has("monitor"))
 		data->monitor_config = ioremap::monitor::monitor_config::parse(options["monitor"]);

@@ -14,6 +14,7 @@ set(ELLIPTICS_SRCS
     ../example/backends.c
     ../example/eblob_backend.cpp
     ../example/eblob_backend.c
+    ../grpc/config.cpp
     ../grpc/elliptics_generated_wrapper.cpp
     ../grpc/grpc.cpp
     ../grpc/read_job.cpp

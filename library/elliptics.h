@@ -455,9 +455,12 @@ void dnet_io_cleanup(struct dnet_node *n);
 
 void dnet_io_req_free(struct dnet_io_req *r);
 
+struct dnet_grpc_server_config;
 struct dnet_config_data {
 	int cfg_addr_num;
 	struct dnet_addr *cfg_addrs;
+
+	struct dnet_grpc_server_config *cfg_grpc;
 
 	struct dnet_config cfg_state;
 };

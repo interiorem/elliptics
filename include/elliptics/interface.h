@@ -407,11 +407,11 @@ struct dnet_config
 	unsigned int	__unused_1;
 	long		__unused_2;
 
-	/* so that we do not change major version frequently */
-	int			reserved_for_future_use[8];
+	/* Config for grpc client */
+	unsigned int		grpc_thread_num;
 
-	unsigned int            grpc_thread_num;
-	const char	        *grpc_address;
+	/* so that we do not change major version frequently */
+	int			reserved_for_future_use[7];
 };
 
 struct dnet_node *dnet_get_node_from_state(void *state);

@@ -29,6 +29,7 @@
 #include "backend.h"
 #include "route.h"
 #include "elliptics/interface.h"
+#include "grpc/grpc.h"
 #include "monitor/monitor.h"
 
 #include "logger.hpp"
@@ -100,6 +101,12 @@ struct dnet_node *dnet_server_node_create(struct dnet_config_data *cfg_data)
 	n = dnet_node_create(cfg);
 	if (!n)
 		goto err_out_exit;
+
+	if (cfg_data->cfg_grpc) {
+		err = dnet_grpc_io_server_start(n, cfg_data->cfg_grpc);
+		if (err)
+			goto err_out_node_destroy;
+	}
 
 	n->config_data = cfg_data;
 
