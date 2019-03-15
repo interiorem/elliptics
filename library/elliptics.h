@@ -443,6 +443,8 @@ struct dnet_io {
 	int			blocked;
 
 	struct list_stat	output_stats;
+
+	struct dnet_grpc_io	*grpc;
 };
 
 int dnet_state_accept_process(struct dnet_net_state *st, struct epoll_event *ev);
@@ -582,8 +584,6 @@ struct dnet_node {
 	 * after which net thread will switch to next ready connection.
 	 */
 	uint32_t		send_limit;
-
-	struct dnet_grpc_io	*grpc;
 };
 
 
