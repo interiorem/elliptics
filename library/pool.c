@@ -30,14 +30,16 @@
 #include <signal.h>
 
 #include "access_context.h"
-#include "elliptics.h"
 #include "backend.h"
+#include "elliptics.h"
 #include "elliptics/interface.h"
-#include "monitor/monitor.h"
-#include "monitor/measure_points.h"
-#include "request_queue.h"
+#include "grpc/config.h"
+#include "grpc/grpc.h"
 #include "library/logger.hpp"
 #include "library/backend.h"
+#include "monitor/measure_points.h"
+#include "monitor/monitor.h"
+#include "request_queue.h"
 
 static char *dnet_work_io_mode_string[] = {
 	[DNET_WORK_IO_MODE_BLOCKING] = "BLOCKING",
@@ -1150,6 +1152,16 @@ int dnet_io_init(struct dnet_node *n, struct dnet_config *cfg)
 		}
 	}
 
+	if (cfg->flags & DNET_CFG_JOIN_NETWORK) {
+		struct dnet_grpc_client_config client_cfg;
+		memset(&client_cfg, 0, sizeof(struct dnet_grpc_client_config));
+		client_cfg.thread_num = cfg->grpc_thread_num;
+
+		err = dnet_grpc_io_client_start(n, &client_cfg);
+		if (err)
+			goto err_out_net_destroy;
+	}
+
 	return 0;
 
 err_out_net_destroy:
@@ -1180,11 +1192,12 @@ err_out_exit:
 
 void dnet_io_stop(struct dnet_node *n) {
 	struct dnet_io *io = n->io;
-	int i;
+
+	dnet_grpc_io_stop(n);
 
 	dnet_set_need_exit(n);
 
-	for (i = 0; i < io->net_thread_num; ++i) {
+	for (int i = 0; i < io->net_thread_num; ++i) {
 		pthread_join(io->net[i].tid, NULL);
 		close(io->net[i].epoll_fd);
 	}

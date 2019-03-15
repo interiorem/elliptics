@@ -17,7 +17,7 @@ int safe_grpc_io_start(dnet_node &node, std::function<void(dnet_grpc_io &)> &&cu
 
 		custom(*grpc);
 
-		node.grpc = grpc.release();
+		node.io->grpc = grpc.release();
 	} catch (const std::bad_alloc &) {
 		DNET_LOG_ERROR(node, "GRPC: Start gRPC IO failed: no memory");
 		return -ENOMEM;
@@ -57,6 +57,6 @@ int dnet_grpc_io_server_start(struct dnet_node *node, struct dnet_grpc_server_co
 
 void dnet_grpc_io_stop(struct dnet_node *node) {
 	DNET_LOG_INFO(node, "GRPC: Stop gRPC IO");
-	delete std::exchange(node->grpc, nullptr);
+	delete std::exchange(node->io->grpc, nullptr);
 	DNET_LOG_INFO(node, "GRPC: Stop gRPC IO successfully finished");
 }
