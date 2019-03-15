@@ -16,9 +16,6 @@ public:
 	write_job_t(dnet_node &node, ::grpc::ServerCompletionQueue &cq, fb_grpc_dnet::Elliptics::AsyncService &service);
 
 private:
-	class responder_t;
-	friend responder_t;
-
 	enum class state {
 		CREATE,
 		REQUEST_RECEIVED_FIRST,

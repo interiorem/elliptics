@@ -82,20 +82,6 @@ write_job_t::rpc_response_t serialize(const write_job_t::response_t &response) {
 
 } // namespace
 
-class write_job_t::responder_t {
-public:
-	explicit responder_t(write_job_t &parent)
-	: parent_(parent) {
-	}
-
-	void reply(std::unique_ptr<response_t> response) {
-		parent_.send_response(std::move(response));
-	}
-
-private:
-	write_job_t &parent_;
-};
-
 write_job_t::write_job_t(dnet_node &node, ::grpc::ServerCompletionQueue &completion_queue,
 	fb_grpc_dnet::Elliptics::AsyncService &service)
 : async_reader_(&ctx_)

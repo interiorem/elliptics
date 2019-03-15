@@ -18,9 +18,6 @@ public:
 	void proceed(bool ok) override;
 
 private:
-	class responder_t;
-	friend responder_t;
-
 	enum class state {
 		CREATE,
 		REQUEST_RECEIVED,
