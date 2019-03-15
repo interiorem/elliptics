@@ -73,21 +73,28 @@ read_job_t::rpc_response_t serialize_part(const read_job_t::response_t &response
 	return builder.ReleaseMessage<fb_grpc_dnet::ReadResponse>();
 }
 
-} // namespace
-
-class read_job_t::responder_t {
+// TODO: Move to common place?
+class responder_t {
 public:
-	explicit responder_t(read_job_t &parent)
-	: parent_(parent) {
+	using on_complete_t = std::function<void (std::unique_ptr<read_job_t::response_t>)>;
+
+	explicit responder_t(on_complete_t &&on_complete)
+	: on_complete_(std::move(on_complete)) {
 	}
 
-	void reply(std::unique_ptr<response_t> response) {
-		parent_.send_response(std::move(response));
+	void reply(std::unique_ptr<read_job_t::response_t> response) {
+		on_complete_(std::move(response));
+	}
+
+	void reply_error(int /*code*/, std::string&& /*message*/) {
+		// TODO(artsel)
 	}
 
 private:
-	read_job_t &parent_;
+	const on_complete_t on_complete_;
 };
+
+} // namespace
 
 read_job_t::read_job_t(dnet_node &node, ::grpc::ServerCompletionQueue &completion_queue,
 	fb_grpc_dnet::Elliptics::AsyncService &service)
@@ -130,8 +137,9 @@ void read_job_t::push_request() {
 	deserialize(rpc_request_, *request);
 	request->deadline = to_dnet_time(ctx_.deadline());
 
-	// TODO add to req
-	// auto responder = new responder_t(*this);
+	// TODO: add to req
+	// #include <functional>
+	// auto responder = new responder_t(std::bind(&read_job_t::send_response, this, std::placeholders::_1));
 
 	auto req = new dnet_io_req;
 	memset(req, 0, sizeof(dnet_io_req));
