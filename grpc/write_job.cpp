@@ -88,33 +88,31 @@ write_job_t::write_job_t(dnet_node &node, ::grpc::ServerCompletionQueue &complet
 , node_(node)
 , completion_queue_(completion_queue)
 , async_service_(service) {
-    proceed(true);
+	async_service_.RequestWrite(&ctx_, &async_reader_, &completion_queue_, &completion_queue_, this);
 }
 
 void write_job_t::proceed(bool more) {
 	// TODO: catch exceptions here
 	switch (state_) {
-	case state::CREATE:
-		state_ = state::REQUEST_RECEIVED_FIRST;
-		// TODO: Use constructor or clear memory for request
-		request_ = std::make_unique<request_t >();
-		async_service_.RequestWrite(&ctx_, &async_reader_, &completion_queue_, &completion_queue_, this);
-		break;
-	case state::REQUEST_RECEIVED_FIRST:
-		state_ = state::REQUEST_RECEIVED;
+	case state_t::REQUEST_WAITING_FIRST:
+		state_ = state_t::REQUEST_WAITING_NEXT;
 		new write_job_t(node_, completion_queue_, async_service_);
 		read_next(true /*first*/, more);
 		break;
-	case state::REQUEST_RECEIVED:
+	case state_t::REQUEST_WAITING_NEXT:
 		read_next(false /*first*/, more);
 		break;
-	case state::FINISH:
+	case state_t::RESPONSE_COMPLETE:
 		delete this;
 		break;
 	}
 }
 
 void write_job_t::read_next(bool first, bool more) {
+	if (first) {
+		// TODO: Use constructor or clear memory for request
+		request_ = std::make_unique<request_t >();
+	}
 	if (!more) {
 		push_request();
 		return;
@@ -144,7 +142,7 @@ void write_job_t::push_request() {
 }
 
 void write_job_t::send_response(std::unique_ptr<response_t> response) {
-	state_ = state::FINISH;
+	state_ = state_t::RESPONSE_COMPLETE;
 	async_reader_.Finish(serialize(*response), ::grpc::Status::OK, this);
 }
 

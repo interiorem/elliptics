@@ -102,30 +102,24 @@ read_job_t::read_job_t(dnet_node &node, ::grpc::ServerCompletionQueue &completio
 , node_(node)
 , completion_queue_(completion_queue)
 , async_service_(service) {
-    proceed(true);
+	async_service_.RequestRead(&ctx_, &rpc_request_, &async_writer_, &completion_queue_, &completion_queue_, this);
 }
 
 void read_job_t::proceed(bool ok) {
 	// TODO: catch exceptions here
 	if (!ok) {
 	    // TODO log
-	    delete this;
-	    return;
+	    state_ = state_t::RESPONSE_COMPLETE;
 	}
 	switch (state_) {
-	case state::CREATE:
-		state_ = state::REQUEST_RECEIVED;
-		async_service_.RequestRead(&ctx_, &rpc_request_, &async_writer_, &completion_queue_,
-		                           &completion_queue_, this);
-		break;
-	case state::REQUEST_RECEIVED:
+	case state_t::REQUEST_WAITING:
 		new read_job_t(node_, completion_queue_, async_service_);
 		push_request();
 		break;
-	case state::RESPONSE_PARTIAL_COMPLETE:
+	case state_t::RESPONSE_PARTIAL_COMPLETE:
 		send_next(false /*first*/);
 		break;
-	case state::FINISH:
+	case state_t::RESPONSE_COMPLETE:
 		delete this;
 		break;
 	}
@@ -152,7 +146,6 @@ void read_job_t::push_request() {
 
 void read_job_t::send_response(std::unique_ptr<response_t> response) {
 	response_ = std::move(response);
-	state_ = state::RESPONSE_PARTIAL_COMPLETE;
 	send_next(true /*first*/);
 }
 
@@ -165,9 +158,10 @@ void read_job_t::send_next(bool first) {
 	auto response = serialize_part(*response_, first, response_json_offset_, response_data_offset_);
 
 	if (response_data_offset_ == response_->json_size && response_data_offset_ == response_->data_size) {
-		state_ = state::FINISH;
+		state_ = state_t::RESPONSE_COMPLETE;
 		async_writer_.WriteAndFinish(response, ::grpc::WriteOptions(), ::grpc::Status::OK, this);
 	} else {
+		state_ = state_t::RESPONSE_PARTIAL_COMPLETE;
 		async_writer_.Write(response, this);
 	}
 }
