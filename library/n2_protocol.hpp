@@ -37,39 +37,24 @@ struct data_place {
 struct message {
 	dnet_cmd cmd;
 
-	virtual void make_owning() {}
 	virtual ~message() = default;
 };
 
-class call {
-public:
-	/*
-	 * To call on client side
-	 */
+struct request_info {
+	std::unique_ptr<message> request;
 
-	// must be called once, otherwise std::logic_error thrown
-	virtual void request(std::unique_ptr<message> msg) = 0;
-
-	// must be called once, otherwise std::logic_error thrown
-	virtual std::unique_ptr<message> get_reply() = 0;
-
-	virtual int get_reply_error() = 0;
-
-	/*
-	 * To call on server side
-	 */
-
-	// must be called once, otherwise std::logic_error thrown
-	virtual std::unique_ptr<message> get_request() = 0;
-
-	// reply or reply_error (only one of them) must be called once, otherwise std::logic_error thrown
-	virtual void reply(std::unique_ptr<message> msg) = 0;
-	virtual void reply_error(int errc) = 0;
-
-	virtual ~call() = default;
+	// Ways to reply (list will be extended for streaming repliers)
+	std::function<void (std::shared_ptr<message>)> reply;
+	std::function<void (int)> reply_error;
 };
 
-int send_response(struct dnet_net_state *st, call *c, message *msg, struct dnet_access_context *context);
+struct response_info {
+	dnet_cmd cmd; // for log, for routing (in case of error-response we not always have message to extract cmd)
+	std::function<void ()> response_processor;
+};
+
+int send_response(struct dnet_net_state *st, struct dnet_cmd *cmd, std::function<void ()> response,
+                  struct dnet_access_context *context);
 
 }}} // namespace ioremap::elliptics::n2
 
@@ -77,7 +62,8 @@ int send_response(struct dnet_net_state *st, call *c, message *msg, struct dnet_
 // common_request is visible from dnet_io_req. Since this struct
 // is visible from C code, it is declared out of namespace.
 struct n2_message : ioremap::elliptics::n2::message {};
-struct n2_call : public ioremap::elliptics::n2::call {};
+struct n2_request_info : public ioremap::elliptics::n2::request_info {};
+struct n2_response_info : public ioremap::elliptics::n2::response_info {};
 
 namespace ioremap { namespace elliptics { namespace n2 {
 
@@ -107,8 +93,6 @@ struct read_response : n2_message {
 	uint64_t read_data_offset;
 	uint64_t read_data_size;
 	data_place data;
-
-	void make_owning() override;
 };
 
 struct write_request : n2_message {

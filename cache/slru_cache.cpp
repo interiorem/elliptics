@@ -248,11 +248,11 @@ write_response_t slru_cache_t::write(dnet_net_state *st,
 }
 
 write_response_t slru_cache_t::n2_write(dnet_net_state *st,
-                                        ioremap::elliptics::n2::call *call,
-                                        ioremap::elliptics::n2::write_request *request,
+                                        ioremap::elliptics::n2::request_info *req_info,
                                         dnet_access_context *context) {
 	TIMER_SCOPE("write");
 
+	auto request = static_cast<ioremap::elliptics::n2::write_request *>(req_info->request.get());
 	auto &cmd = request->cmd;
 
 	const auto id = cmd.id.id;
@@ -286,8 +286,7 @@ write_response_t slru_cache_t::n2_write(dnet_net_state *st,
 		const auto &callbacks = m_backend.callbacks();
 		int err = callbacks.n2_command_handler(st,
 		                                       callbacks.command_private,
-		                                       static_cast<n2_call *>(call),
-		                                       request,
+		                                       static_cast<n2_request_info *>(req_info),
 		                                       &stats,
 		                                       context);
 

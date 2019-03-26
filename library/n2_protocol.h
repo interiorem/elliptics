@@ -7,13 +7,15 @@ extern "C" {
 
 struct dnet_cmd;
 struct dnet_node;
-struct n2_call;
+struct n2_request_info;
+struct n2_response_info;
 struct n2_message;
 
-struct dnet_cmd *n2_message_access_cmd(struct n2_message *msg);
+struct dnet_cmd *n2_request_info_access_cmd(struct n2_request_info *req_info);
+struct dnet_cmd *n2_response_info_access_cmd(struct n2_response_info *resp_info);
 
-int n2_call_get_request(struct dnet_node *n, struct n2_call *call_data, struct n2_message **msg);
-void n2_call_free(struct n2_call *call_data);
+void n2_request_info_free(struct n2_request_info *req_info);
+void n2_response_info_free(struct n2_response_info *resp_info);
 
 #ifdef __cplusplus
 }

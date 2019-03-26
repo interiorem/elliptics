@@ -60,6 +60,12 @@ struct dnet_cmd_stats;
 struct dnet_access_context;
 struct n2_message;
 
+enum dnet_io_req_type {
+	DNET_IO_REQ_OLD_PROTOCOL = 0,
+	DNET_IO_REQ_TYPED_REQUEST = 1,
+	DNET_IO_REQ_TYPED_RESPONSE = 2,
+};
+
 struct dnet_io_req {
 	struct list_head		req_entry;
 
@@ -83,7 +89,10 @@ struct dnet_io_req {
 
 	struct dnet_access_context 	*context;
 
-	struct n2_call			*call_data;
+	enum dnet_io_req_type		io_req_type;
+	struct n2_request_info		*request_info;
+	struct n2_response_info		*response_info;
+
 };
 
 #define ELLIPTICS_PROTOCOL_VERSION_0 2
@@ -657,7 +666,7 @@ int __attribute__((weak)) dnet_process_cmd_raw(struct dnet_net_state *st,
                                                long queue_time,
                                                struct dnet_access_context *context);
 int __attribute__((weak)) n2_process_cmd_raw(struct dnet_net_state *st,
-                                             struct n2_call *call_data,
+                                             struct n2_request_info *req_info,
                                              int recursive,
                                              long queue_time,
                                              struct dnet_access_context *context);

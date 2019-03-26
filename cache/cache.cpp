@@ -147,10 +147,9 @@ write_response_t cache_manager::write(dnet_net_state *st,
 }
 
 write_response_t cache_manager::n2_write(dnet_net_state *st,
-                                         ioremap::elliptics::n2::call *call,
-                                         ioremap::elliptics::n2::write_request *request,
+                                         ioremap::elliptics::n2::request_info *req_info,
                                          dnet_access_context *context) {
-	return m_caches[idx(request->cmd.id.id)]->n2_write(st, call, request, context);
+	return m_caches[idx(req_info->request->cmd.id.id)]->n2_write(st, req_info, context);
 }
 
 read_response_t cache_manager::read(const unsigned char *id, uint64_t ioflags) {
@@ -337,11 +336,12 @@ static int dnet_cmd_cache_io_write_new(struct cache_manager *cache,
 
 static int n2_cmd_cache_io_write_new(struct cache_manager *cache,
                                      struct dnet_net_state *st,
-                                     ioremap::elliptics::n2::call *call,
-                                     ioremap::elliptics::n2::write_request *request,
+                                     ioremap::elliptics::n2::request_info *req_info,
                                      struct dnet_cmd_stats *cmd_stats,
                                      dnet_access_context *context) {
 	using namespace ioremap::elliptics;
+
+	auto request = static_cast<n2::write_request *>(req_info->request.get());
 
 	if (request->ioflags & DNET_IO_FLAGS_NOCACHE) {
 		return -ENOTSUP;
@@ -351,7 +351,7 @@ static int n2_cmd_cache_io_write_new(struct cache_manager *cache,
 	int err;
 	cache_item it;
 
-	std::tie(status, err, it) = cache->n2_write(st, call, request, context);
+	std::tie(status, err, it) = cache->n2_write(st, req_info, context);
 
 	if (status == write_status::HANDLED_IN_CACHE) {
 		auto response = std::make_unique<n2::lookup_response>();
@@ -369,15 +369,14 @@ static int n2_cmd_cache_io_write_new(struct cache_manager *cache,
 		cmd_stats->size = request->json.size() + request->data.size();
 		cmd_stats->handled_in_cache = 1;
 
-		request->cmd.flags &= ~DNET_FLAGS_NEED_ACK;
-
-		err = n2::send_response(st, call, response.release(), context);
+		err = n2::send_response(st,
+		                        &request->cmd,
+		                        std::bind(req_info->reply, std::shared_ptr<n2::lookup_response>(std::move(response))),
+		                        context);
 
 	} else if (status == write_status::HANDLED_IN_BACKEND) {
 		cmd_stats->size = request->json_size + request->data_size;
 		cmd_stats->handled_in_cache = 0;
-
-		request->cmd.flags &= ~DNET_FLAGS_NEED_ACK;
 	}
 
 	return err;
@@ -519,11 +518,12 @@ static int dnet_cmd_cache_io_read_new(struct cache_manager *cache,
 
 static int n2_cmd_cache_io_read_new(struct cache_manager *cache,
                                     struct dnet_net_state *st,
-                                    ioremap::elliptics::n2::call *call,
-                                    ioremap::elliptics::n2::read_request *request,
+                                    ioremap::elliptics::n2::request_info *req_info,
                                     struct dnet_cmd_stats *cmd_stats,
                                     dnet_access_context *context) {
 	using namespace ioremap::elliptics;
+
+	auto request = static_cast<n2::read_request *>(req_info->request.get());
 
 	if (request->ioflags & DNET_IO_FLAGS_NOCACHE) {
 		return -ENOTSUP;
@@ -580,9 +580,10 @@ static int n2_cmd_cache_io_read_new(struct cache_manager *cache,
 	cmd_stats->size = json.size() + data_p.size();
 	cmd_stats->handled_in_cache = 1;
 
-	request->cmd.flags &= ~DNET_FLAGS_NEED_ACK;
-
-	return n2::send_response(st, call, response.release(), context);
+	return n2::send_response(st,
+	                         &request->cmd,
+	                         std::bind(req_info->reply, std::shared_ptr<n2::read_response>(std::move(response))),
+	                         context);
 }
 
 static int dnet_cmd_cache_io_lookup(struct dnet_backend *backend,
@@ -797,11 +798,10 @@ int dnet_cmd_cache_io(struct dnet_backend *backend,
 
 int n2_cmd_cache_io(struct dnet_backend *backend,
                     struct dnet_net_state *st,
-                    struct n2_call *call_data,
-                    struct n2_message *msg,
+                    struct n2_request_info *req_info,
                     struct dnet_cmd_stats *cmd_stats,
                     struct dnet_access_context *context) {
-	auto &cmd = msg->cmd;
+	auto &cmd = req_info->request->cmd;
 
 	if (cmd.flags & DNET_FLAGS_NOCACHE)
 		return -ENOTSUP;
@@ -815,15 +815,9 @@ int n2_cmd_cache_io(struct dnet_backend *backend,
 	try {
 		switch (cmd.cmd) {
 		case DNET_CMD_WRITE_NEW:
-			return n2_cmd_cache_io_write_new(cache, st,
-			                                 static_cast<ioremap::elliptics::n2::call *>(call_data),
-			                                 static_cast<ioremap::elliptics::n2::write_request *>(msg),
-			                                 cmd_stats, context);
+			return n2_cmd_cache_io_write_new(cache, st, req_info, cmd_stats, context);
 		case DNET_CMD_READ_NEW:
-			return n2_cmd_cache_io_read_new(cache, st,
-			                                static_cast<ioremap::elliptics::n2::call *>(call_data),
-			                                static_cast<ioremap::elliptics::n2::read_request *>(msg),
-			                                cmd_stats, context);
+			return n2_cmd_cache_io_read_new(cache, st, req_info, cmd_stats, context);
 		default:
 			return -ENOTSUP;
 		}

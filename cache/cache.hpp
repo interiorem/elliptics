@@ -416,8 +416,7 @@ public:
 	                       dnet_access_context *context);
 
 	write_response_t n2_write(dnet_net_state *st,
-	                          ioremap::elliptics::n2::call *call,
-	                          ioremap::elliptics::n2::write_request *request,
+	                          ioremap::elliptics::n2::request_info *req_info,
 	                          dnet_access_context *context);
 
 	read_response_t read(const unsigned char *id, uint64_t ioflags);

@@ -1537,10 +1537,9 @@ int dnet_backend_process_cmd_raw(struct dnet_backend *backend,
 
 int n2_backend_process_cmd_raw(struct dnet_backend *backend,
                                struct dnet_net_state *st,
-                               struct n2_call *call_data,
-                               struct n2_message *msg,
+                               struct n2_request_info *req_info,
                                struct dnet_cmd_stats *cmd_stats,
                                struct dnet_access_context *context) {
 	auto &callbacks = backend->callbacks();
-	return callbacks.n2_command_handler(st, callbacks.command_private, call_data, msg, cmd_stats, context);
+	return callbacks.n2_command_handler(st, callbacks.command_private, req_info, cmd_stats, context);
 }

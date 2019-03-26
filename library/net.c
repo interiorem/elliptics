@@ -330,13 +330,23 @@ err_out_exit:
 
 void dnet_io_req_free(struct dnet_io_req *r)
 {
-	n2_call_free(r->call_data);
+	switch (r->io_req_type) {
+	case DNET_IO_REQ_OLD_PROTOCOL:
+		if (r->fd >= 0 && r->fsize) {
+			if (r->on_exit & DNET_IO_REQ_FLAGS_CACHE_FORGET)
+				posix_fadvise(r->fd, r->local_offset, r->fsize, POSIX_FADV_DONTNEED);
+			if (r->on_exit & DNET_IO_REQ_FLAGS_CLOSE)
+				close(r->fd);
+		}
+		break;
 
-	if (r->fd >= 0 && r->fsize) {
-		if (r->on_exit & DNET_IO_REQ_FLAGS_CACHE_FORGET)
-			posix_fadvise(r->fd, r->local_offset, r->fsize, POSIX_FADV_DONTNEED);
-		if (r->on_exit & DNET_IO_REQ_FLAGS_CLOSE)
-			close(r->fd);
+	case DNET_IO_REQ_TYPED_REQUEST:
+		n2_request_info_free(r->request_info);
+		break;
+
+	case DNET_IO_REQ_TYPED_RESPONSE:
+		n2_response_info_free(r->response_info);
+		break;
 	}
 
 	dnet_access_access_put(r->context);
@@ -737,9 +747,9 @@ int dnet_process_recv(struct dnet_net_state *st, struct dnet_io_req *r) {
 		dnet_access_context_add_string(context, "access", "server");
 		HANDY_COUNTER_INCREMENT("io.cmds", 1);
 
-		err = r->call_data
-			? n2_process_cmd_raw(st, r->call_data, 0, r->queue_time, context)
-			: dnet_process_cmd_raw(st, cmd, r->data, 0, r->queue_time, context);
+		err = r->io_req_type == DNET_IO_REQ_OLD_PROTOCOL
+			? dnet_process_cmd_raw(st, cmd, r->data, 0, r->queue_time, context)
+			: n2_process_cmd_raw(st, r->request_info, 0, r->queue_time, context);
 	} else {
 		dnet_access_context_add_string(context, "access", "server/forward");
 		dnet_access_context_add_string(context, "forward", dnet_state_dump_addr(forward_state));

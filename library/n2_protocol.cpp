@@ -55,32 +55,30 @@ data_place data_place::from_memory(data_pointer memory_data) {
 	};
 }
 
-int send_response(struct dnet_net_state *st, call *c, message *msg, struct dnet_access_context *context) {
-	return n2_send_response(st, static_cast<n2_call *>(c), static_cast<n2_message *>(msg), context);
-}
-
-void read_response::make_owning() {
-	data.force_memory();
+int send_response(struct dnet_net_state *st, struct dnet_cmd *cmd, std::function<void ()> response,
+                  struct dnet_access_context *context) {
+	auto resp_info = new response_info({ *cmd, std::move(response) });
+	return n2_send_response(st, static_cast<n2_response_info *>(resp_info), context);
 }
 
 }}} // namespace ioremap::elliptics::n2
 
 extern "C" {
 
-struct dnet_cmd *n2_message_access_cmd(struct n2_message *msg) {
-	return &msg->cmd;
+struct dnet_cmd *n2_request_info_access_cmd(struct n2_request_info *req_info) {
+	return &req_info->request->cmd;
 }
 
-int n2_call_get_request(struct dnet_node *n, struct n2_call *call_data, struct n2_message **msg) {
-	auto impl = [&]{
-		*msg = static_cast<n2_message *>(call_data->get_request().release());
-		return 0;
-	};
-	return c_exception_guard(impl, n, __FUNCTION__);
+struct dnet_cmd *n2_response_info_access_cmd(struct n2_response_info *resp_info) {
+	return &resp_info->cmd;
 }
 
-void n2_call_free(struct n2_call *call_data) {
-	delete call_data;
+void n2_request_info_free(struct n2_request_info *req_info) {
+	delete req_info;
+}
+
+void n2_response_info_free(struct n2_response_info *resp_info) {
+	delete resp_info;
 }
 
 } // extern "C"

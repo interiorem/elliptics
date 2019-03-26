@@ -1276,8 +1276,7 @@ static int eblob_backend_command_handler(void *state,
 
 static int n2_eblob_backend_command_handler(void *state,
                                             void *priv,
-                                            struct n2_call *call_data,
-                                            struct n2_message *msg,
+                                            struct n2_request_info *req_info,
                                             void *cmd_stats,
                                             struct dnet_access_context *context) {
 	// TODO(sabramkin)

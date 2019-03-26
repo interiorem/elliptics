@@ -1761,8 +1761,7 @@ int dnet_process_cmd_raw(struct dnet_net_state *st,
 
 // Keep this enums in sync with enums from dnet_cmd_needs_backend
 static int n2_process_cmd_without_backend_raw(struct dnet_net_state *st,
-                                              struct n2_call *call_data,
-                                              struct n2_message *msg,
+                                              struct n2_request_info *req_info,
                                               struct dnet_cmd_stats *cmd_stats,
                                               struct dnet_access_context *context) {
 	// TODO(sabramkin)
@@ -1770,8 +1769,7 @@ static int n2_process_cmd_without_backend_raw(struct dnet_net_state *st,
 }
 
 static int n2_process_cmd_with_backend_raw(struct dnet_net_state *st,
-                                           struct n2_call *call_data,
-                                           struct n2_message *msg,
+                                           struct n2_request_info *req_info,
                                            struct dnet_cmd_stats *cmd_stats __attribute__((unused)),
                                            struct dnet_access_context *context) {
 	int err = 0;
@@ -1779,7 +1777,7 @@ static int n2_process_cmd_with_backend_raw(struct dnet_net_state *st,
 	struct dnet_io_attr *io = NULL;
 	struct timespec start, end;
 	struct dnet_backend *backend = NULL;
-	struct dnet_cmd *cmd = n2_message_access_cmd(msg);
+	struct dnet_cmd *cmd = n2_request_info_access_cmd(req_info);
 
 	// filter supported commands
 	switch (cmd->cmd) {
@@ -1805,10 +1803,10 @@ static int n2_process_cmd_with_backend_raw(struct dnet_net_state *st,
 	}
 
 	if (!err) {
-		err = n2_cmd_cache_io(backend, st, call_data, msg, cmd_stats, context);
+		err = n2_cmd_cache_io(backend, st, req_info, cmd_stats, context);
 		if (err == -ENOTSUP) {
 			cmd->flags &= ~DNET_FLAGS_NEED_ACK;
-			err = n2_backend_process_cmd_raw(backend, st, call_data, msg, cmd_stats, context);
+			err = n2_backend_process_cmd_raw(backend, st, req_info, cmd_stats, context);
 		}
 	}
 
@@ -1838,21 +1836,17 @@ static int n2_process_cmd_with_backend_raw(struct dnet_net_state *st,
 }
 
 int n2_process_cmd_raw(struct dnet_net_state *st,
-                       struct n2_call *call_data,
+                       struct n2_request_info *req_info,
                        int recursive,
                        const long queue_time,
                        struct dnet_access_context *context) {
 	int err = 0;
 	struct dnet_node *n = st->n;
 	struct n2_message *msg;
-	struct dnet_cmd *cmd = n2_message_access_cmd(msg);
+	struct dnet_cmd *cmd = n2_request_info_access_cmd(msg);
 	const unsigned long long tid = cmd->trans;
 	struct timespec start, end;
 	struct dnet_cmd_stats cmd_stats;
-
-	err = n2_call_get_request(n, call_data, &msg);
-	if (err)
-		return err;
 
 	memset(&cmd_stats, 0, sizeof(cmd_stats));
 	cmd_stats.queue_time = queue_time;
@@ -1862,9 +1856,9 @@ int n2_process_cmd_raw(struct dnet_net_state *st,
 
 	clock_gettime(CLOCK_MONOTONIC_RAW, &start);
 
-	err = n2_process_cmd_without_backend_raw(st, call_data, msg, &cmd_stats, context);
+	err = n2_process_cmd_without_backend_raw(st, req_info, &cmd_stats, context);
 	if (err == -ENOTSUP)
-		err = n2_process_cmd_with_backend_raw(st, call_data, msg, &cmd_stats, context);
+		err = n2_process_cmd_with_backend_raw(st, req_info, &cmd_stats, context);
 
 	clock_gettime(CLOCK_MONOTONIC_RAW, &end);
 	cmd_stats.handle_time = DIFF_TIMESPEC(start, end);
@@ -1883,7 +1877,8 @@ int n2_process_cmd_raw(struct dnet_net_state *st,
 	("io.cmd%s.%d.%s.%d", (recursive ? "_recursive" : ""), cmd->backend_id, dnet_cmd_string(cmd->cmd), err), 1);
 	HANDY_COUNTER_INCREMENT(("io.cmd%s.%s.%d", (recursive ? "_recursive" : ""), dnet_cmd_string(cmd->cmd), err), 1);
 
-	err = n2_send_error(st, call_data, err, context); // TODO(sabramkin): pass 'recursive'
+	// TODO(sabramkin): pass 'recursive' parameter
+	err = n2_send_error_response(st, req_info, err, context);
 
 	dnet_stat_inc(st->stat, cmd->cmd, err);
 	if (st->__join_state == DNET_JOIN)

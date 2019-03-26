@@ -1413,13 +1413,13 @@ int dnet_trans_forward(struct dnet_io_req *r, struct dnet_net_state *orig, struc
 	return dnet_trans_send(t, r);
 }
 
-dnet_io_req *n2_create_io_req(struct n2_call *call_data) {
+dnet_io_req *n2_create_io_req_from_response(struct n2_response_info *resp_info) {
 	// To be freed in C code: used C-style allocation
 	auto r = static_cast<dnet_io_req *>(calloc(1, sizeof(dnet_io_req)));
 	if (!r)
 		throw std::bad_alloc();
 
-	r->call_data = call_data;
+	r->response_info = resp_info;
 	return r;
 }
 
@@ -1433,45 +1433,37 @@ void n2_schedule_io_req(struct dnet_net_state *st, struct dnet_io_req *r, struct
 	dnet_schedule_io(st->n, r);
 }
 
-void n2_send_response_local(struct dnet_net_state *st, struct n2_call *call_data,
-                            struct n2_message *msg, struct dnet_access_context *context) {
+void n2_send_response_local(struct dnet_net_state *st, struct n2_response_info *resp_info,
+                            struct dnet_access_context *context) {
 	DNET_LOG_DEBUG(st->n, "Sending response to local state"); // TODO: dump response info
 
-	auto r = n2_create_io_req(call_data);
-	msg->make_owning();
-	call_data->reply(std::unique_ptr<ioremap::elliptics::n2::message>(msg));
-	n2_schedule_io_req(st, r, context);
-}
-
-void n2_send_error_local(struct dnet_net_state *st, struct n2_call *call_data,
-                         int errc, struct dnet_access_context *context) {
-	DNET_LOG_DEBUG(st->n, "Sending error response to local state: %d", errc);
-
-	auto r = n2_create_io_req(call_data);
-	call_data->reply_error(errc);
+	auto r = n2_create_io_req_from_response(resp_info);
 	n2_schedule_io_req(st, r, context);
 }
 
 int n2_send_response(struct dnet_net_state *st,
-                     struct n2_call *call_data,
-                     struct n2_message *msg,
+                     struct n2_response_info *resp_info,
                      struct dnet_access_context *context) {
 	try {
-		dnet_cmd *cmd = &msg->cmd;
-		DNET_LOG(st->n, DNET_LOG_NOTICE, "%s: %s: reply trans: %lld -> %s (%p): cflags: %s",
-			 dnet_dump_id(&cmd->id), dnet_cmd_string(cmd->cmd), (unsigned long long)cmd->trans,
-			 dnet_state_dump_addr(st), static_cast<void *>(st),
+		dnet_cmd *cmd = &resp_info->cmd;
+		bool local_net_state = (st == st->n->st);
+
+		DNET_LOG(st->n, DNET_LOG_NOTICE, "%s: %s: %s reply trans: %lld -> %s (%p): cflags: %s",
+			 dnet_dump_id(&cmd->id), dnet_cmd_string(cmd->cmd), local_net_state ? "local" : "net",
+			 (unsigned long long)cmd->trans, dnet_state_dump_addr(st), static_cast<void *>(st),
 			 dnet_flags_dump_cflags(cmd->flags));
 
-		if (st == st->n->st) {
+		if (local_net_state) {
 			/*
 			 * If destination is local node, call with reply are scheduled to the proper IO pool directly.
 			 * If msg hold fd instead of data it should be read here (see n2_io_req_local).
 			 */
-			n2_send_response_local(st, call_data, msg, context);
+			n2_schedule_io_req(st,
+			                   n2_create_io_req_from_response(resp_info),
+			                   context);
 		} else {
 			// If destination is remote node, just reply on call.
-			call_data->reply(std::unique_ptr<ioremap::elliptics::n2::message>(msg));
+			resp_info->response_processor();
 		}
 	} catch (const std::exception &e) {
 		DNET_LOG_ERROR(st->n, "Sending response: %s", e.what());
@@ -1482,25 +1474,14 @@ int n2_send_response(struct dnet_net_state *st,
 	return 0;
 }
 
-int n2_send_error(struct dnet_net_state *st,
-                  struct n2_call *call_data,
-                  int errc,
-                  struct dnet_access_context *context) {
-	try {
-		// TODO(sabramkin): log. For log, get cmd from call_data some way
+int n2_send_error_response(struct dnet_net_state *st,
+                           struct n2_request_info *req_info,
+                           int errc,
+                           struct dnet_access_context *context) {
+	using namespace ioremap::elliptics;
 
-		if (st == st->n->st) {
-			n2_send_error_local(st, call_data, errc, context);
-
-		} else {
-			call_data->reply_error(errc);
-		}
-
-	} catch (const std::exception &e) {
-		DNET_LOG_ERROR(st->n, "Sending error_response: %s", e.what());
-		// TODO(sabramkin): delete n2_call ?
-	}
-
-	// TODO(sabramkin): always returns 0: fix
-	return 0;
+	return n2::send_response(st,
+	                         &req_info->request->cmd,
+	                         std::bind(req_info->reply_error, errc),
+	                         context);
 }

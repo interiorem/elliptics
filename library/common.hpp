@@ -59,28 +59,6 @@ inline static int safe_call(Class *obj, Method method, Args &&...args)
 	}
 }
 
-template <typename LoggerRef>
-inline static void c_exception_guard_log(const LoggerRef &logger_ref, const char *func_name,
-                                         const char *exception_details) {
-	DNET_LOG_ERROR(logger_ref, "{}: {}", func_name, exception_details);
-}
-
-template <typename Callable, typename LoggerRef>
-inline static int c_exception_guard(Callable &&callable, const LoggerRef &logger_ref, const char *func_name) {
-	try {
-		return std::forward<Callable>(callable)();
-	} catch (std::bad_alloc &e) {
-		c_exception_guard_log(logger_ref, func_name, e.what());
-		return -ENOMEM;
-	} catch (std::exception &e) {
-		c_exception_guard_log(logger_ref, func_name, e.what());
-		return -EINVAL;
-	} catch (...) {
-		c_exception_guard_log(logger_ref, func_name, "non-standard exception");
-		return -EINVAL;
-	}
-}
-
 inline static bool operator <(const dnet_id &lhs, const dnet_id &rhs) {
 	return dnet_id_cmp(&lhs, &rhs) < 0;
 }
