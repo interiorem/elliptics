@@ -32,7 +32,7 @@ public:
 
 		DNET_LOG_INFO(node_, "GRPC: server listening on {}", server_address);
 
-		thread_ = std::make_unique<std::thread>(std::bind(&server::completion_thread, this));
+		thread_.reset(new std::thread(std::bind(&server::completion_thread, this)));
 	}
 
 	void completion_thread() {
@@ -79,5 +79,6 @@ void dnet_start_grpc_server(struct dnet_node *n) {
 }
 
 void dnet_stop_grpc_server(struct dnet_node *n) {
-	delete std::exchange(n->io->grpc, nullptr);
+        delete n->io->grpc;
+        n->io->grpc = nullptr;
 }

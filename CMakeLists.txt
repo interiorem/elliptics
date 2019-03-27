@@ -70,10 +70,6 @@ else()
     add_definitions(-DBYTEORDER=1234)
 endif()
 
-if (UNIX OR MINGW)
-    add_definitions(-W -Wall -Wextra -fstack-protector-all -fno-strict-aliasing -g)
-endif()
-
 # Check for threads
 if (UNIX AND BSD)
     set(CMAKE_THREAD_LIBS -pthread)
@@ -133,7 +129,8 @@ set(ELLIPTICS_LIBRARIES
     ${CMAKE_THREAD_LIBS_INIT}
     )
 
-set(FLATBUFFERS_BUILD_FLATC ON)
+# Add flatbuffers
+set(FLATBUFFERS_BUILD_FLATC OFF)
 set(FLATBUFFERS_CODE_COVERAGE OFF)
 set(FLATBUFFERS_BUILD_TESTS OFF)
 set(FLATBUFFERS_INSTALL OFF)
@@ -141,7 +138,26 @@ set(FLATBUFFERS_BUILD_FLATLIB ON)
 set(FLATBUFFERS_BUILD_FLATHASH OFF)
 set(FLATBUFFERS_BUILD_GRPCTEST OFF)
 set(FLATBUFFERS_BUILD_SHAREDLIB OFF)
-add_subdirectory(foreign/flatbuffers)
+add_subdirectory(foreign/flatbuffers EXCLUDE_FROM_ALL)
+
+# Add gRPC
+set(gRPC_INSTALL OFF)
+set(gRPC_BUILD_TESTS OFF)
+set(gRPC_BUILD_CODEGEN OFF)
+set(gRPC_BUILD_CSHARP_EXT OFF)
+set(gRPC_USE_PROTO_LITE ON)
+set(gRPC_ZLIB_PROVIDER OFF)
+set(gRPC_CARES_PROVIDER module)
+set(gRPC_SSL_PROVIDER module)
+set(gRPC_PROTOBUF_PROVIDER OFF)
+set(gRPC_GFLAGS_PROVIDER OFF)
+set(gRPC_BENCHMARK_PROVIDER OFF)
+add_subdirectory(foreign/grpc EXCLUDE_FROM_ALL)
+
+# Build definitions for internal libraries
+if (UNIX OR MINGW)
+    add_definitions(-W -Wall -Wextra -fstack-protector-all -fno-strict-aliasing -g)
+endif()
 
 # Build parts
 add_subdirectory(cache)
@@ -150,7 +166,6 @@ add_subdirectory(bindings)
 add_subdirectory(monitor)
 add_subdirectory(tests)
 add_subdirectory(example)
-add_subdirectory(grpc)
 
 install(FILES
         include/elliptics/core.h

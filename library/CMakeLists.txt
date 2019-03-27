@@ -1,7 +1,4 @@
-include_directories(
-    ${PROJECT_BINARY_DIR}
-    ${PROJECT_SOURCE_DIR}/foreign/flatbuffers/include
-)
+include_directories(${PROJECT_BINARY_DIR})
 
 set(ELLIPTICS_SRCS
     dnet.c
@@ -14,10 +11,10 @@ set(ELLIPTICS_SRCS
     ../example/backends.c
     ../example/eblob_backend.cpp
     ../example/eblob_backend.c
-    ../grpc/elliptics_generated_wrapper.cpp
     ../grpc/grpc_server.cpp
     ../grpc/read_request.cpp
     ../grpc/requests_common.cpp
+    ../grpc/schema/elliptics.grpc.fb.cc
     ../grpc/write_request.cpp
     )
 
@@ -40,13 +37,11 @@ target_link_libraries(elliptics
     elliptics_ids
     elliptics_monitor
     elliptics_client
-    kora-util
+    flatbuffers
     gpr
     grpc
     grpc++
-    )
-add_dependencies(elliptics
-    generate-from-schema
+    kora-util
     )
 
 install(TARGETS elliptics

@@ -1,8 +1,8 @@
 [submodule "foreign/flatbuffers"]
 	path = foreign/flatbuffers
-	url = git@github.com:interiorem/flatbuffers.git
+	url = git://github.com/interiorem/flatbuffers.git
 	branch = release
 [submodule "foreign/grpc"]
 	path = foreign/grpc
-	url = git@github.com:interiorem/grpc.git
+	url = git://github.com/interiorem/grpc.git
 	branch = release
