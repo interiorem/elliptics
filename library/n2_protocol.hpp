@@ -1,8 +1,6 @@
 #ifndef ELLIPTICS_N2_PROTOCOL_HPP
 #define ELLIPTICS_N2_PROTOCOL_HPP
 
-#include <optional>
-
 #include "elliptics/packet.h"
 #include "elliptics/utils.hpp"
 

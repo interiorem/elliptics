@@ -5,7 +5,7 @@ namespace ioremap { namespace elliptics { namespace grpc_dnet {
 write_request_manager::write_request_manager(service_provider_info &service_provider_info_in, handler_t handler_in)
 : request_manager_base(service_provider_info_in)
 , rpc_call_io_(&ctx_)
-, request_(std::make_unique<request_t>())
+, request_(new request_t)
 , request_json_offset_(0)
 , request_data_offset_(0)
 , handler_(std::move(handler_in))
@@ -20,6 +20,12 @@ void write_request_manager::send_response(std::unique_ptr<response_t> response) 
 }
 
 void write_request_manager::process_completion(bool more) {
+	if (!more) {
+		// TODO Fix it. write_request_manager does not work
+		// On gRPC shutdown CompletionQueue calls proceed(more) with flag more=false
+		// and the same for finish of successfully write.
+		on_complete_op_ = on_complete_op::DELETE;
+	}
 	switch (on_complete_op_) {
 	case on_complete_op::READ_REQUEST_FIRST:
 		on_complete_op_ = on_complete_op::READ_REQUEST;

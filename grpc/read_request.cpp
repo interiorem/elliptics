@@ -18,7 +18,11 @@ void read_request_manager::send_response(std::unique_ptr<response_t> response) {
 	on_complete_op_ = send_next();
 }
 
-void read_request_manager::process_completion(bool) {
+void read_request_manager::process_completion(bool ok) {
+        if (!ok) {
+                //TODO log
+                on_complete_op_ = on_complete_op::DELETE;
+        }
 	switch (on_complete_op_) {
 	case on_complete_op::HANDLE_REQUEST:
 		new read_request_manager(provider_, handler_);
@@ -41,7 +45,7 @@ void read_request_manager::process_completion(bool) {
 }
 
 void read_request_manager::handle_request() {
-	auto request = std::make_unique<request_t>();
+	std::unique_ptr<request_t> request(new request_t);
 	deserialize(rpc_request_, *request);
 	time_point_to_dnet_time(ctx_.deadline(), request->deadline);
 
