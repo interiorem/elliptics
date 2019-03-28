@@ -147,7 +147,7 @@ write_response_t cache_manager::write(dnet_net_state *st,
 }
 
 write_response_t cache_manager::n2_write(dnet_net_state *st,
-                                         ioremap::elliptics::n2::request_info *req_info,
+                                         n2_request_info *req_info,
                                          dnet_access_context *context) {
 	return m_caches[idx(req_info->request->cmd.id.id)]->n2_write(st, req_info, context);
 }
@@ -336,7 +336,7 @@ static int dnet_cmd_cache_io_write_new(struct cache_manager *cache,
 
 static int n2_cmd_cache_io_write_new(struct cache_manager *cache,
                                      struct dnet_net_state *st,
-                                     ioremap::elliptics::n2::request_info *req_info,
+                                     n2_request_info *req_info,
                                      struct dnet_cmd_stats *cmd_stats,
                                      dnet_access_context *context) {
 	using namespace ioremap::elliptics;
@@ -518,7 +518,7 @@ static int dnet_cmd_cache_io_read_new(struct cache_manager *cache,
 
 static int n2_cmd_cache_io_read_new(struct cache_manager *cache,
                                     struct dnet_net_state *st,
-                                    ioremap::elliptics::n2::request_info *req_info,
+                                    n2_request_info *req_info,
                                     struct dnet_cmd_stats *cmd_stats,
                                     dnet_access_context *context) {
 	using namespace ioremap::elliptics;

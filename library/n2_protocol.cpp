@@ -57,8 +57,8 @@ data_place data_place::from_memory(data_pointer memory_data) {
 
 int send_response(struct dnet_net_state *st, struct dnet_cmd *cmd, std::function<void ()> response,
                   struct dnet_access_context *context) {
-	auto resp_info = new response_info({ *cmd, std::move(response) });
-	return n2_send_response(st, static_cast<n2_response_info *>(resp_info), context);
+	auto resp_info = new n2_response_info({ *cmd, std::move(response) });
+	return n2_send_response(st, resp_info, context);
 }
 
 }}} // namespace ioremap::elliptics::n2

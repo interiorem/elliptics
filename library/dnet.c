@@ -1842,8 +1842,7 @@ int n2_process_cmd_raw(struct dnet_net_state *st,
                        struct dnet_access_context *context) {
 	int err = 0;
 	struct dnet_node *n = st->n;
-	struct n2_message *msg;
-	struct dnet_cmd *cmd = n2_request_info_access_cmd(msg);
+	struct dnet_cmd *cmd = n2_request_info_access_cmd(req_info);
 	const unsigned long long tid = cmd->trans;
 	struct timespec start, end;
 	struct dnet_cmd_stats cmd_stats;
