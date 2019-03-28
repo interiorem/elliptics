@@ -1193,6 +1193,8 @@ struct dnet_net_state *dnet_state_create(struct dnet_node *n,
 
 err_out_send_destroy:
 	dnet_state_reset(st, err);
+	if (atomic_read(&st->refcnt) > 1)
+		dnet_state_put(st);
 	dnet_state_put(st);
 	goto err_out_exit;
 err_out_dup_destroy:
