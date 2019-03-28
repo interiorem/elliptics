@@ -1,3 +1,9 @@
+elliptics (2.27.9.6) unstable; urgency=low
+
+  * fix: memory and fd leak if dnet_net_state creation failed
+
+ -- Artem Selishchev <arselishev@gmail.com>  Fri, 29 Mar 2019 02:40:33 +0300
+
 elliptics (2.27.9.5) unstable; urgency=low
 
   * cache: fix bad return if not interested in data
