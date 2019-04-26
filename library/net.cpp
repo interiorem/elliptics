@@ -792,7 +792,8 @@ static void dnet_process_socket(const dnet_connect_state_ptr &state, epoll_event
 		int err;
 
 		/* If we are server check that connected node has the same number of addresses.
-		 * At the moment server nodes with different number of addresses can't be connected to each other.
+		 * At the moment server nodes with different number of addresses can't be connected to each other (for
+		 * example, node with ipv4+ipv6 addresses cannot be connected with node with the only ipv4 address).
 		 */
 		if (state->node->addr_num && (cnt->addr_num != state->node->addr_num)) {
 			err = -EINVAL;
@@ -1212,6 +1213,8 @@ static net_addr_list dnet_reconnect_victims(struct dnet_node *node, int *flags)
 	struct dnet_addr_storage *ast, *tmp;
 	list_for_each_entry_safe(ast, tmp, &node->reconnect_list, reconnect_entry) {
 		list_del_init(&ast->reconnect_entry);
+		node->reconnect_num--;
+
 		addrs.push_back(ast->addr);
 
 		if (ast->__join_state == DNET_JOIN)
