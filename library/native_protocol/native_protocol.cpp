@@ -26,8 +26,9 @@ int protocol::send_request(dnet_net_state *st,
 		std::unique_ptr<dnet_trans, void (*)(dnet_trans *)>
 			t(dnet_trans_search(st, cmd.trans), &dnet_trans_put);
 
-		if (!t || !t->repliers)
+		if (!t || !t->repliers) {
 			return -EINVAL;
+		}
 
 		*t->repliers = std::move(repliers);
 	}

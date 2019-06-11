@@ -1477,7 +1477,7 @@ int n2_complete_trans_via_response_holder(dnet_trans *t, n2_response_info *respo
 }
 
 // TODO(sabramkin): Try rework to n2_trans_alloc_send. In new mechanic we don't need to separate alloc and send
-static int n2_trans_send(dnet_trans *t, n2_request_info *request_info) {
+int n2_trans_send(dnet_trans *t, n2_request_info *request_info) {
 	using namespace ioremap::elliptics;
 
 	struct dnet_net_state *st = t->st;

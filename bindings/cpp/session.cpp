@@ -209,7 +209,13 @@ const dnet_addr &address::to_raw() const
 namespace filters {
 bool positive(const callback_result_entry &entry)
 {
-	return entry.status() == 0 && !entry.data().empty();
+	if (entry.tmp_is_n2_protocol()) {
+		// in new mechanic protocol interface won't provide explicit ack
+		return entry.status() == 0;
+	} else {
+		// legacy, hasn't been touched
+		return entry.status() == 0 && !entry.data().empty();
+	}
 }
 
 bool positive_with_ack(const callback_result_entry &entry)
@@ -224,12 +230,24 @@ bool negative(const callback_result_entry &entry)
 
 bool negative_with_ack(const callback_result_entry &entry)
 {
-	return entry.status() != 0 || entry.data().empty();
+	if (entry.tmp_is_n2_protocol()) {
+		// in new mechanic protocol interface won't provide explicit ack
+		return entry.status() != 0;
+	} else {
+		// legacy, hasn't been touched
+		return entry.status() != 0 || entry.data().empty();
+	}
 }
 
 bool all(const callback_result_entry &entry)
 {
-	return entry.status() != 0 || !entry.data().empty();
+	if (entry.tmp_is_n2_protocol()) {
+		// in new mechanic protocol interface won't provide explicit ack
+		return true;
+	} else {
+		// legacy, hasn't been touched
+		return entry.status() != 0 || !entry.data().empty();
+	}
 }
 
 bool all_with_ack(const callback_result_entry &entry)
@@ -1087,7 +1105,7 @@ struct cas_functor : std::enable_shared_from_this<cas_functor>
 			cmd.cmd = DNET_CMD_WRITE;
 
 			auto data = std::make_shared<callback_result_data>(&addr, &cmd);
-			callback_result_entry entry = data;
+			callback_result_entry entry(data);
 			handler.process(*static_cast<const write_result_entry *>(&entry));
 			handler.complete(error_info());
 			return;

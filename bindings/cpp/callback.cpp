@@ -40,24 +40,41 @@ public:
 		return 0;
 	}
 
+	// Used by old (protocol-dependent) mechanic, must be removed after refactoring
 	basic_handler(std::unique_ptr<dnet_logger> logger, async_generic_result &result) :
 		m_logger(std::move(logger)),
 		m_handler(result), m_completed(0), m_total(0)
 	{
+		memset(&m_addr, 0, sizeof(dnet_addr));
+		memset(&m_cmd, 0, sizeof(dnet_cmd));
 	}
 
-	bool handle(dnet_addr *addr, dnet_cmd *cmd)
+	basic_handler(const dnet_cmd &cmd, std::unique_ptr<dnet_logger> logger, async_generic_result &result) :
+		m_cmd(cmd),
+		m_logger(std::move(logger)),
+		m_handler(result), m_completed(0), m_total(0)
 	{
-		if (is_trans_destroyed(cmd)) {
-			return increment_completed();
-		}
+		memset(&m_addr, 0, sizeof(dnet_addr));
+	}
 
+	void log_reply_info(dnet_addr *addr, dnet_cmd *cmd)
+	{
 		DNET_LOG(m_logger, cmd->status ? DNET_LOG_ERROR : DNET_LOG_NOTICE, "{}: {}: handled reply from: {}, "
 		                                                                   "trans: {}, cflags: {}, status: {}, "
 		                                                                   "size: {}, client: {}, last: {}",
 		         dnet_dump_id(&cmd->id), dnet_cmd_string(cmd->cmd), addr ? dnet_addr_string(addr) : "<unknown>",
 		         cmd->trans, dnet_flags_dump_cflags(cmd->flags), int(cmd->status), cmd->size,
 		         !(cmd->flags & DNET_FLAGS_REPLY), !(cmd->flags & DNET_FLAGS_MORE));
+	}
+
+	// Used by old (protocol-dependent) mechanic, must be removed after refactoring
+	bool handle(dnet_addr *addr, dnet_cmd *cmd)
+	{
+		if (is_trans_destroyed(cmd)) {
+			return increment_completed();
+		}
+
+		log_reply_info(addr, cmd);
 
 		auto data = std::make_shared<callback_result_data>(addr, cmd);
 
@@ -69,6 +86,33 @@ public:
 		m_handler.process(entry);
 
 		return false;
+	}
+
+	int on_reply(const std::shared_ptr<n2_body> &result, bool is_last)
+	{
+		// TODO(sabramkin): Output only protocol-independent known info (currently old-mechanic logging used)
+		log_reply_info(&m_addr, &m_cmd);
+
+		auto data = std::make_shared<n2_callback_result_data>(m_addr, m_cmd, result, 0, is_last);
+		callback_result_entry entry(data);
+		m_handler.process(entry);
+
+		increment_completed(); // TODO(sabramkin): correctly process trans destroying
+		return 0;
+	}
+
+	int on_reply_error(int err, bool is_last)
+	{
+		// TODO(sabramkin): Output only protocol-independent known info (currently old-mechanic logging used)
+		log_reply_info(&m_addr, &m_cmd);
+
+		auto data = std::make_shared<n2_callback_result_data>(m_addr, m_cmd, nullptr, err, is_last);
+		data->error = create_error(err, "n2 lookup_new error"); // TODO(sabramkin): rework error
+		callback_result_entry entry(data);
+		m_handler.process(entry);
+
+		increment_completed(); // TODO(sabramkin): correctly process trans destroying
+		return 0;
 	}
 
 	// how many independent transactions share this handler plus call below
@@ -92,6 +136,11 @@ private:
 		return false;
 	}
 
+public:
+	dnet_addr m_addr;
+
+private:
+	dnet_cmd m_cmd;
 	std::unique_ptr<dnet_logger> m_logger;
 	async_result_handler<callback_result_entry> m_handler;
 	std::atomic_size_t m_completed;
@@ -106,7 +155,6 @@ async_generic_result send_impl(session &sess, T &control, Method method)
 	async_generic_result result(sess);
 
 	detail::basic_handler *handler = new detail::basic_handler(sess.get_logger(), result);
-
 	control.complete = detail::basic_handler::handler;
 	control.priv = handler;
 
@@ -140,6 +188,41 @@ static size_t send_to_single_state_io_impl(session &sess, dnet_io_control &ctl)
 async_generic_result send_to_single_state(session &sess, dnet_io_control &control)
 {
 	return send_impl(sess, control, send_to_single_state_io_impl);
+}
+
+template <typename Method>
+async_generic_result n2_send_impl(session &sess, const n2_request &request, Method method)
+{
+	async_generic_result result(sess);
+
+	auto handler = std::make_shared<detail::basic_handler>(request.cmd, sess.get_logger(), result);
+	n2_request_info request_info{ request, n2_repliers() };
+
+	request_info.repliers.on_reply =
+		[handler](const std::shared_ptr<n2_body> &result, bool is_last){
+			return handler->on_reply(result, is_last);
+		};
+	request_info.repliers.on_reply_error =
+		[handler](int err, bool is_last){
+			return handler->on_reply_error(err, is_last);
+		};
+
+	const size_t count = method(sess, std::move(request_info), handler->m_addr);
+	handler->set_total(count);
+	return result;
+}
+
+int n2_trans_alloc_send(dnet_session *s, n2_request_info &&request_info, dnet_addr &addr_out); // implemented in trans.cpp
+
+static size_t n2_send_to_single_state_impl(session &sess, n2_request_info &&request_info, dnet_addr &addr_out)
+{
+	n2_trans_alloc_send(sess.get_native(), std::move(request_info), addr_out);
+	return 1;
+}
+
+async_generic_result n2_send_to_single_state(session &sess, const n2_request &request)
+{
+	return n2_send_impl(sess, request, n2_send_to_single_state_impl);
 }
 
 static size_t send_to_each_backend_impl(session &sess, dnet_trans_control &ctl)

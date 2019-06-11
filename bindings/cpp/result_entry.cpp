@@ -23,6 +23,19 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include <exception>
+
+template<class T, class Base> T &dynamic_cast_checked(Base &base, const char *file, int line) {
+	try {
+		return dynamic_cast<T &>(base);
+	} catch (const std::bad_cast &) {
+		std::cout << getpid() << ": BAD_CAST: " << file << ":" << line << std::endl;
+		abort();
+		return *(T *)0;
+	}
+}
+
+#define dynamic_cast2(T, b) dynamic_cast_checked<T>(b, __FILE__, __LINE__);
 
 namespace ioremap { namespace elliptics {
 
@@ -46,6 +59,7 @@ namespace ioremap { namespace elliptics {
 	} \
 	do {} while (false)
 
+// TODO(sabramkin): this is default constructor that operates with deprecated callback_result_data
 callback_result_entry::callback_result_entry() : m_data(std::make_shared<callback_result_data>())
 {
 }
@@ -54,7 +68,7 @@ callback_result_entry::callback_result_entry(const callback_result_entry &other)
 {
 }
 
-callback_result_entry::callback_result_entry(const std::shared_ptr<callback_result_data> &data) : m_data(data)
+callback_result_entry::callback_result_entry(const std::shared_ptr<callback_result_data_base> &data) : m_data(data)
 {
 }
 
@@ -70,27 +84,27 @@ callback_result_entry &callback_result_entry::operator =(const callback_result_e
 
 bool callback_result_entry::is_valid() const
 {
-	return !m_data->data.empty();
+	return m_data->is_valid();
 }
 
 bool callback_result_entry::is_ack() const
 {
-	return status() == 0 && data().empty();
+	return m_data->is_ack();
 }
 
 bool callback_result_entry::is_final() const
 {
-	return !(command()->flags & DNET_FLAGS_MORE);
+	return m_data->is_final();
 }
 
 bool callback_result_entry::is_client() const
 {
-	return !(command()->flags & DNET_FLAGS_REPLY);
+	return m_data->is_client();
 }
 
 int callback_result_entry::status() const
 {
-	return command()->status;
+	return m_data->status();
 }
 
 error_info callback_result_entry::error() const
@@ -100,30 +114,26 @@ error_info callback_result_entry::error() const
 
 data_pointer callback_result_entry::raw_data() const
 {
-	return m_data->data;
+	auto &old_data = dynamic_cast2(callback_result_data, *m_data);
+	return old_data.data;
 }
 
 struct dnet_addr *callback_result_entry::address() const
 {
-	DNET_DATA_BEGIN();
-	return m_data->data
-		.data<struct dnet_addr>();
-	DNET_DATA_END(0);
+	return m_data->address();
 }
 
 struct dnet_cmd *callback_result_entry::command() const
 {
-	DNET_DATA_BEGIN();
-	return m_data->data
-		.skip<struct dnet_addr>()
-		.data<struct dnet_cmd>();
-	DNET_DATA_END(0);
+	return m_data->command();
 }
 
 data_pointer callback_result_entry::data() const
 {
+	auto &old_data = dynamic_cast2(callback_result_data, *m_data);
+
 	DNET_DATA_BEGIN();
-	return m_data->data
+	return old_data.data
 		.skip<struct dnet_addr>()
 		.skip<struct dnet_cmd>();
 	DNET_DATA_END(0);
@@ -131,9 +141,22 @@ data_pointer callback_result_entry::data() const
 
 uint64_t callback_result_entry::size() const
 {
-	return (m_data->data.size() <= (sizeof(struct dnet_addr) + sizeof(struct dnet_cmd)))
+	auto &old_data = dynamic_cast2(callback_result_data, *m_data);
+
+	return (old_data.data.size() <= (sizeof(struct dnet_addr) + sizeof(struct dnet_cmd)))
 		? (0)
-		: (m_data->data.size() - (sizeof(struct dnet_addr) + sizeof(struct dnet_cmd)));
+		: (old_data.data.size() - (sizeof(struct dnet_addr) + sizeof(struct dnet_cmd)));
+}
+
+n2_body *callback_result_entry::body() const
+{
+	auto &n2_data = dynamic_cast2(n2_callback_result_data, *m_data);
+	return n2_data.result_body.get();
+}
+
+bool callback_result_entry::tmp_is_n2_protocol() const
+{
+	return m_data->tmp_is_n2_protocol;
 }
 
 read_result_entry::read_result_entry()
