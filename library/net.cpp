@@ -40,14 +40,15 @@
 #include "bindings/cpp/timer.hpp"
 
 #include "access_context.h"
-#include "elliptics.h"
-#include "elliptics/packet.h"
-#include "elliptics/interface.h"
 #include "common.hpp"
-#include "protocol.hpp"
+#include "elliptics.h"
+#include "elliptics/interface.h"
+#include "elliptics/packet.h"
+#include "lambda_visitor.hpp"
 #include "logger.hpp"
 #include "n2_protocol.hpp"
 #include "native_protocol/serialize.hpp"
+#include "protocol.hpp"
 #include "tests.h"
 
 
@@ -1597,6 +1598,20 @@ static int n2_send_cmd(dnet_net_state *st, dnet_cmd *cmd) {
 	                        sizeof(dnet_cmd) - st->send_offset);
 }
 
+static int n2_send_chunk(dnet_net_state *st, const ioremap::elliptics::n2::chunk_t &chunk, uint64_t offset) {
+	using namespace ioremap::elliptics;
+
+	auto visitor = make_lambda_visitor<int>(
+		[st, offset](const data_pointer &dp) -> ssize_t {
+			auto dp_left = dp.skip(offset);
+			return dnet_send_nolock(st, dp_left.data(), dp_left.size());
+		},
+		[st, offset](const n2::file_pointer &fp) -> ssize_t {
+			return dnet_send_fd_nolock(st, fp.fd, fp.offset + offset, fp.size - offset);
+		});
+	return boost::apply_visitor(visitor, chunk);
+}
+
 static int n2_send_request_impl(dnet_net_state *st, dnet_io_req *r) {
 	using namespace ioremap::elliptics;
 
@@ -1637,15 +1652,14 @@ static int n2_send_request_impl(dnet_net_state *st, dnet_io_req *r) {
 		if (!send_error) {
 			size_t current_block_offset = sizeof(dnet_cmd);
 
-			for (const auto &dp : serialized.chunks) {
-				size_t current_block_end_offset = current_block_offset + dp.size();
+			for (const auto &chunk : serialized.chunks) {
+				size_t current_block_end_offset = current_block_offset + n2::chunk_size(chunk);
 				if (st->send_offset < current_block_end_offset) /*block hasn't sent*/ {
-					auto dp_left = dp.skip(st->send_offset - current_block_offset);
-					send_error = dnet_send_nolock(st, dp_left.data(), dp_left.size());
-					if (send_error)
+					send_error = n2_send_chunk(st, chunk, st->send_offset - current_block_offset);
+					if (send_error) {
 						break;
+					}
 				}
-
 				current_block_offset = current_block_end_offset;
 			}
 		}

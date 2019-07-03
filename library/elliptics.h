@@ -817,8 +817,9 @@ void dnet_io_req_enqueue_net(struct dnet_net_state *st, struct dnet_io_req *r);
 
 int dnet_recv_list(struct dnet_node *n, struct dnet_net_state *st);
 
+ssize_t dnet_send_fd_nolock(struct dnet_net_state *st, int fd, uint64_t offset, uint64_t dsize);
 ssize_t dnet_send_fd(struct dnet_net_state *st, void *header, uint64_t hsize,
-		int fd, uint64_t offset, uint64_t dsize, int on_exit, struct dnet_access_context *context);
+                     int fd, uint64_t offset, uint64_t dsize, int on_exit, struct dnet_access_context *context);
 ssize_t dnet_send_data(struct dnet_net_state *st,
                        void *header,
                        uint64_t hsize,

@@ -7,6 +7,7 @@
 #include "access_context.h"
 #include "common.hpp"
 #include "elliptics.h"
+#include "lambda_visitor.hpp"
 #include "native_protocol/native_protocol.hpp"
 
 n2_request::n2_request(const dnet_cmd &cmd_,
@@ -107,6 +108,27 @@ remove_request::remove_request(uint64_t ioflags_,
 : ioflags(ioflags_)
 , timestamp(timestamp_)
 {}
+
+file_pointer::file_pointer(int fd_,
+                           uint64_t offset_,
+                           uint64_t size_,
+                           int on_exit_)
+: fd(fd_)
+, offset(offset_)
+, size(size_)
+, on_exit(on_exit_)
+{}
+
+size_t chunk_size(const chunk_t& chunk) {
+	static thread_local const auto visitor = make_lambda_visitor<size_t>(
+		[](const data_pointer &dp) {
+			return dp.size();
+		},
+		[](const n2::file_pointer &fp) {
+			return fp.size;
+		});
+	return boost::apply_visitor(visitor, chunk);
+}
 
 }}} // namespace ioremap::elliptics::n2
 

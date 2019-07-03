@@ -10,8 +10,7 @@ struct n2_serialized {
 	// Typed message usually represented as some struct that references to allocated memory blocks. When we serialize,
 	// we don't want to concat large blocks of data to one continuous memory block, since we don't want to copy memory.
 	// Instead, we get serialized message as multi-chunk vector, each chunk ot that is a view of particular message part.
-	// TODO: Assumed that sendfile'll be supported later, and n2_serialized became vector<some_variant>
-	using chunks_t = std::vector<ioremap::elliptics::data_pointer>;
+	using chunks_t = std::vector<ioremap::elliptics::n2::chunk_t>;
 	chunks_t chunks;
 };
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <boost/variant.hpp>
+
 #include "elliptics/interface.h"
 #include "elliptics/utils.hpp"
 
@@ -146,5 +148,23 @@ struct remove_request : n2_body {
 	remove_request(uint64_t ioflags,
 	               dnet_time timestamp);
 };
+
+struct file_pointer {
+	int fd = -1;
+	uint64_t offset = 0;
+	uint64_t size = 0;
+	int on_exit = 0;
+
+	file_pointer(int fd,
+	             uint64_t offset,
+	             uint64_t size,
+	             int on_exit);
+};
+
+using chunk_t = boost::variant<data_pointer, file_pointer>;
+
+size_t chunk_size(const chunk_t& chunk);
+
+// TODO(artsel): place here read_request and read_response
 
 }}} // namespace ioremap::elliptics::n2

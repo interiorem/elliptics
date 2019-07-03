@@ -435,7 +435,7 @@ ssize_t dnet_send_data(struct dnet_net_state *st,
 	return dnet_io_req_queue(st, &r);
 }
 
-static ssize_t dnet_send_fd_nolock(struct dnet_net_state *st, int fd, uint64_t offset, uint64_t dsize)
+ssize_t dnet_send_fd_nolock(struct dnet_net_state *st, int fd, uint64_t offset, uint64_t dsize)
 {
 	ssize_t err = 0;
 
