@@ -546,6 +546,14 @@ static void test_bulk_remove(session &sess, size_t test_count)
 	for (auto it = result.begin(); it != result.end(); ++it) {
 		// count only acks since they are the only packets returned by remove()
 		count += (it->status() == 0) && (it->is_ack());
+		if (!it->is_ack()) {
+			std::cout
+			<< ": raw_data_size = " << it->raw_data().size()
+			<< ", data_size = " << it->data().size()
+			<< ", size = " << it->size()
+			<< ", headsize = " << (sizeof(dnet_addr) +sizeof(dnet_cmd))
+			<< "\n";
+		}
 		BOOST_WARN_EQUAL(it->status(), 0);
 	}
 	BOOST_REQUIRE_EQUAL(count, test_count * 2);
@@ -1044,33 +1052,33 @@ bool register_tests(const nodes_data *setup)
 	ELLIPTICS_TEST_CASE(test_bulk_write, use_session(n, {1, 2}, 0, 0), 1000);
 	ELLIPTICS_TEST_CASE(test_bulk_read, use_session(n, {1, 2}, 0, 0), 1000);
 	ELLIPTICS_TEST_CASE(test_bulk_remove, use_session(n, {1, 2}, 0, 0), 1000);
-	ELLIPTICS_TEST_CASE(test_range_request, use_session(n, {2}, 0, 0), 0, 255, 2);
-	ELLIPTICS_TEST_CASE(test_range_request, use_session(n, {2}, 0, 0), 3, 14, 2);
-	ELLIPTICS_TEST_CASE(test_range_request, use_session(n, {2}, 0, 0), 7, 3, 2);
-	ELLIPTICS_TEST_CASE(test_metadata, use_session(n, {1, 2}, 0, 0), "metadata-key", "meta-data");
-	ELLIPTICS_TEST_CASE(test_partial_bulk_read, use_session(n, {1, 2, 3}, 0, 0));
-	ELLIPTICS_TEST_CASE(test_prepare_latest, use_session(n, {1, 2}, 0, 0), "prepare-latest-key");
-	ELLIPTICS_TEST_CASE(test_partial_lookup, use_session(n, {1, 2}, 0, 0), "partial-lookup-key");
-	ELLIPTICS_TEST_CASE(test_parallel_lookup, use_session(n, {1, 2, 3}, 0, 0), "parallel-lookup-key");
-	ELLIPTICS_TEST_CASE(test_quorum_lookup, use_session(n, {1, 2, 3}, 0, 0), "quorum-lookup-key");
-	ELLIPTICS_TEST_CASE(test_partial_quorum_lookup, use_session(n, {1, 2, 3}, 0, 0), "partial-quorum-lookup-key");
-	ELLIPTICS_TEST_CASE(test_fail_partial_quorum_lookup, use_session(n, {1, 2, 3}, 0, 0),
-	                    "fail-partial-quorum-lookup-key");
-	ELLIPTICS_TEST_CASE(test_fail_parallel_lookup, use_session(n, {1, 2, 3}, 0, 0), -ENOENT);
-	ELLIPTICS_TEST_CASE(test_fail_parallel_lookup, use_session(n, {91, 92, 93}, 0, 0), -ENXIO);
-	ELLIPTICS_TEST_CASE(test_fail_quorum_lookup, use_session(n, {1, 2, 3}, 0, 0), -ENOENT);
-	ELLIPTICS_TEST_CASE(test_fail_quorum_lookup, use_session(n, {91, 92, 93}, 0, 0), -ENXIO);
-	ELLIPTICS_TEST_CASE(test_read_latest_non_existing, use_session(n, {1, 2}, 0, 0), "read-latest-non-existing");
-	ELLIPTICS_TEST_CASE(test_lookup_non_existing, use_session(n, { 1, 2 }, 0, 0), -ENOENT);
-	ELLIPTICS_TEST_CASE(test_lookup_non_existing, use_session(n, { 1 }, 0, 0), -ENOENT);
-	ELLIPTICS_TEST_CASE(test_lookup_non_existing, use_session(n, { 99 }, 0, 0), -ENXIO);
-	ELLIPTICS_TEST_CASE(test_read_mix_states_ioflags, use_session(n, {1, 2}, 0, 0), "read-mix-states-ioflags");
-#ifndef NO_SERVER
-	ELLIPTICS_TEST_CASE(test_requests_to_own_server,
-	                    use_session(setup->nodes.front().get_native(), {1, 2, 3}, 0, 0));
-#endif
-	ELLIPTICS_TEST_CASE(test_lookup_corrupted, use_session(n, {1}, 0, 0), "lookup corrupted test key",
-	                    "lookup corrupted test data");
+//	ELLIPTICS_TEST_CASE(test_range_request, use_session(n, {2}, 0, 0), 0, 255, 2);
+//	ELLIPTICS_TEST_CASE(test_range_request, use_session(n, {2}, 0, 0), 3, 14, 2);
+//	ELLIPTICS_TEST_CASE(test_range_request, use_session(n, {2}, 0, 0), 7, 3, 2);
+//	ELLIPTICS_TEST_CASE(test_metadata, use_session(n, {1, 2}, 0, 0), "metadata-key", "meta-data");
+//	ELLIPTICS_TEST_CASE(test_partial_bulk_read, use_session(n, {1, 2, 3}, 0, 0));
+//	ELLIPTICS_TEST_CASE(test_prepare_latest, use_session(n, {1, 2}, 0, 0), "prepare-latest-key");
+//	ELLIPTICS_TEST_CASE(test_partial_lookup, use_session(n, {1, 2}, 0, 0), "partial-lookup-key");
+//	ELLIPTICS_TEST_CASE(test_parallel_lookup, use_session(n, {1, 2, 3}, 0, 0), "parallel-lookup-key");
+//	ELLIPTICS_TEST_CASE(test_quorum_lookup, use_session(n, {1, 2, 3}, 0, 0), "quorum-lookup-key");
+//	ELLIPTICS_TEST_CASE(test_partial_quorum_lookup, use_session(n, {1, 2, 3}, 0, 0), "partial-quorum-lookup-key");
+//	ELLIPTICS_TEST_CASE(test_fail_partial_quorum_lookup, use_session(n, {1, 2, 3}, 0, 0),
+//	                    "fail-partial-quorum-lookup-key");
+//	ELLIPTICS_TEST_CASE(test_fail_parallel_lookup, use_session(n, {1, 2, 3}, 0, 0), -ENOENT);
+//	ELLIPTICS_TEST_CASE(test_fail_parallel_lookup, use_session(n, {91, 92, 93}, 0, 0), -ENXIO);
+//	ELLIPTICS_TEST_CASE(test_fail_quorum_lookup, use_session(n, {1, 2, 3}, 0, 0), -ENOENT);
+//	ELLIPTICS_TEST_CASE(test_fail_quorum_lookup, use_session(n, {91, 92, 93}, 0, 0), -ENXIO);
+//	ELLIPTICS_TEST_CASE(test_read_latest_non_existing, use_session(n, {1, 2}, 0, 0), "read-latest-non-existing");
+//	ELLIPTICS_TEST_CASE(test_lookup_non_existing, use_session(n, { 1, 2 }, 0, 0), -ENOENT);
+//	ELLIPTICS_TEST_CASE(test_lookup_non_existing, use_session(n, { 1 }, 0, 0), -ENOENT);
+//	ELLIPTICS_TEST_CASE(test_lookup_non_existing, use_session(n, { 99 }, 0, 0), -ENXIO);
+//	ELLIPTICS_TEST_CASE(test_read_mix_states_ioflags, use_session(n, {1, 2}, 0, 0), "read-mix-states-ioflags");
+//#ifndef NO_SERVER
+//	ELLIPTICS_TEST_CASE(test_requests_to_own_server,
+//	                    use_session(setup->nodes.front().get_native(), {1, 2, 3}, 0, 0));
+//#endif
+//	ELLIPTICS_TEST_CASE(test_lookup_corrupted, use_session(n, {1}, 0, 0), "lookup corrupted test key",
+//	                    "lookup corrupted test data");
 
 	return true;
 }

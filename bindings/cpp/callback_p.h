@@ -157,6 +157,7 @@ class callback_result_data : public callback_result_data_base
 
 		bool is_ack() const override
 		{
+			printf("DBG status %d, size %d, index %d, empty %d\n", int(status()), int(data.size()), int(data.offset()), int(data.empty()));
 			return status() == 0 && data.empty();
 		}
 
