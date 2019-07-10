@@ -85,6 +85,10 @@ int protocol::recv_response(dnet_net_state *st, const dnet_cmd &cmd, data_pointe
 	n2_repliers &repliers = *t->repliers;
 	bool last = !(cmd.flags & DNET_FLAGS_MORE);
 
+	if (last) {
+		t->cmd = cmd;
+	}
+
 	if (cmd.status) {
 		return repliers.on_reply_error(cmd.status, last);
 	}

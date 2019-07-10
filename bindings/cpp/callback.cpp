@@ -196,15 +196,33 @@ async_generic_result n2_send_impl(session &sess, const n2_request &request, Meth
 	async_generic_result result(sess);
 
 	auto handler = std::make_shared<detail::basic_handler>(request.cmd, sess.get_logger(), result);
+
+	auto calls_counter = std::make_shared<std::atomic<bool>>(false);
+	auto test_and_set_reply_has_sent = [calls_counter](bool last) {
+		if (last) {
+			return calls_counter->exchange(true);
+		} else {
+			return bool(*calls_counter);
+		}
+	};
+
 	n2_request_info request_info{ request, n2_repliers() };
 
 	request_info.repliers.on_reply =
-		[handler](const std::shared_ptr<n2_body> &result, bool is_last){
-			return handler->on_reply(result, is_last);
+		[handler, test_and_set_reply_has_sent](const std::shared_ptr<n2_body> &result, bool last){
+			if (test_and_set_reply_has_sent(last)) {
+				return -EALREADY;
+			}
+
+			return handler->on_reply(result, last);
 		};
 	request_info.repliers.on_reply_error =
-		[handler](int err, bool is_last){
-			return handler->on_reply_error(err, is_last);
+		[handler, test_and_set_reply_has_sent](int err, bool last){
+			if (test_and_set_reply_has_sent(last)) {
+				return -EALREADY;
+			}
+
+			return handler->on_reply_error(err, last);
 		};
 
 	const size_t count = method(sess, std::move(request_info), handler->m_addr);

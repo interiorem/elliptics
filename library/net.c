@@ -655,6 +655,52 @@ static int dnet_process_reply(struct dnet_net_state *st, struct dnet_io_req *r) 
 	}
 	pthread_mutex_unlock(&st->trans_lock);
 
+	if (t) {
+		++t->stats.recv_replies;
+		t->stats.recv_size += sizeof(struct dnet_cmd) + cmd->size; // TODO: replace protocol-dependent behavior
+		t->stats.recv_queue_time += r->queue_time;
+		t->stats.recv_time += r->recv_time;
+
+		if (t->complete) {
+			if (t->command == DNET_CMD_READ || t->command == DNET_CMD_READ_NEW) {
+				uint64_t ioflags = 0;
+				if ((t->command == DNET_CMD_READ) &&
+				    (cmd->size >= sizeof(struct dnet_io_attr)) &&
+				    (t->alloc_size >= sizeof(struct dnet_cmd) + sizeof(struct dnet_io_attr))) {
+					struct dnet_io_attr *recv_io = (struct dnet_io_attr *)(cmd + 1);
+
+					struct dnet_cmd *local_cmd = (struct dnet_cmd *)(t + 1);
+					struct dnet_io_attr *local_io = (struct dnet_io_attr *)(local_cmd + 1);
+
+					ioflags = local_io->flags = recv_io->flags;
+					local_io->size = recv_io->size;
+					local_io->offset = recv_io->offset;
+					local_io->user_flags = recv_io->user_flags;
+					local_io->total_size = recv_io->total_size;
+					local_io->timestamp = recv_io->timestamp;
+
+					dnet_convert_io_attr(local_io);
+				}
+
+				if (st && !(flags & DNET_FLAGS_MORE)) {
+					struct timespec ts;
+					long diff;
+
+					clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+					diff = DIFF_TIMESPEC(t->start_ts, ts);
+
+					dnet_update_backend_weight(st, cmd, ioflags, diff);
+				}
+			}
+
+			t->complete(dnet_state_addr(t->st), cmd, t->priv);
+		}
+	}
+
+	if (r->io_req_type == DNET_IO_REQ_TYPED_RESPONSE) {
+		n2_complete_trans_via_response_holder(n, r->response_info);
+	}
+
 	if (!t) {
 		dnet_log(n, DNET_LOG_ERROR, "%s: could not find transaction for reply: trans %llu",
 		         dnet_dump_id(&cmd->id), (unsigned long long)tid);
@@ -662,52 +708,12 @@ static int dnet_process_reply(struct dnet_net_state *st, struct dnet_io_req *r) 
 		goto out;
 	}
 
-	++t->stats.recv_replies;
-	t->stats.recv_size += sizeof(struct dnet_cmd) + cmd->size; // TODO: replace protocol-dependent behavior
-	t->stats.recv_queue_time += r->queue_time;
-	t->stats.recv_time += r->recv_time;
-
-	if (t->complete) {
-		if (t->command == DNET_CMD_READ || t->command == DNET_CMD_READ_NEW) {
-			uint64_t ioflags = 0;
-			if ((t->command == DNET_CMD_READ) &&
-			    (cmd->size >= sizeof(struct dnet_io_attr)) &&
-			    (t->alloc_size >= sizeof(struct dnet_cmd) + sizeof(struct dnet_io_attr))) {
-				struct dnet_io_attr *recv_io = (struct dnet_io_attr *)(cmd + 1);
-
-				struct dnet_cmd *local_cmd = (struct dnet_cmd *)(t + 1);
-				struct dnet_io_attr *local_io = (struct dnet_io_attr *)(local_cmd + 1);
-
-				ioflags = local_io->flags = recv_io->flags;
-				local_io->size = recv_io->size;
-				local_io->offset = recv_io->offset;
-				local_io->user_flags = recv_io->user_flags;
-				local_io->total_size = recv_io->total_size;
-				local_io->timestamp = recv_io->timestamp;
-
-				dnet_convert_io_attr(local_io);
-			}
-
-			if (st && !(flags & DNET_FLAGS_MORE)) {
-				struct timespec ts;
-				long diff;
-
-				clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-				diff = DIFF_TIMESPEC(t->start_ts, ts);
-
-				dnet_update_backend_weight(st, cmd, ioflags, diff);
-			}
-		}
-
-		t->complete(dnet_state_addr(t->st), cmd, t->priv);
-	}
-
-	if (t->repliers) {
-		n2_complete_trans_via_response_holder(t, r->response_info);
-	}
-
 	if (!(flags & DNET_FLAGS_MORE)) {
+		int t_cmd_status = t->cmd.status;
 		memcpy(&t->cmd, cmd, sizeof(struct dnet_cmd));
+		if (t_cmd_status)
+			t->cmd.status = t_cmd_status;
+
 		dnet_trans_put(t);
 	} else {
 		/*

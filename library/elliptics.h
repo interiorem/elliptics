@@ -811,7 +811,7 @@ int dnet_trans_send(struct dnet_trans *t, struct dnet_io_req *req);
 
 int dnet_trans_forward(struct dnet_io_req *r, struct dnet_net_state *orig, struct dnet_net_state *forward);
 int n2_trans_forward(struct n2_request_info *request_info, struct dnet_net_state *orig, struct dnet_net_state *forward);
-int n2_complete_trans_via_response_holder(struct dnet_trans *t, struct n2_response_info *response_info);
+int n2_complete_trans_via_response_holder(struct dnet_node *n, struct n2_response_info *response_info);
 
 void dnet_io_req_enqueue_net(struct dnet_net_state *st, struct dnet_io_req *r);
 
