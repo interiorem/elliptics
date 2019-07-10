@@ -14,6 +14,7 @@
 #include "library/access_context.h"
 #include "library/common.hpp"
 #include "library/elliptics.h"
+#include "library/n2_protocol.hpp"
 #include "library/protocol.hpp"
 
 #include "bindings/cpp/functional_p.h"
@@ -103,19 +104,20 @@ private:
 		inner_handler(const session &s,
 		              const async_lookup_result &result,
 		              std::vector<int> &&groups,
-		              const dnet_trans_control &control)
+		              n2_request &&request)
 		: parent_type(s, result, std::move(groups))
-		, m_control(control) {
+		, m_request(std::move(request)) {
 		}
 
 	protected:
 		async_generic_result send_to_next_group() override {
-			m_control.id.group_id = current_group();
-			return send_to_single_state(m_sess, m_control);
+			// TODO(sabramkin): control'll be mutated each time, think about copy?
+			m_request.cmd.id.group_id = current_group();
+			return n2_send_to_single_state(m_sess, m_request);
 		}
 
 	private:
-		dnet_trans_control m_control;
+		n2_request m_request;
 	};
 
 public:
@@ -128,17 +130,18 @@ public:
 		m_handler.set_total(1);
 	}
 
-	void start(std::vector<int> &&groups, const transport_control &control) {
+	void start(std::vector<int> &&groups, n2_request &&request) {
+		dnet_cmd &cmd = request.cmd;
 		DNET_LOG_INFO(m_log, "{}: {}: started: groups: {}, cflags: {}", dnet_dump_id_str(m_key.raw_id().id),
-		              dnet_cmd_string(control.get_native().cmd), groups,
-		              dnet_flags_dump_cflags(control.get_native().cflags));
+		              dnet_cmd_string(cmd.cmd), groups,
+		              dnet_flags_dump_cflags(cmd.flags));
 
 		m_context.reset(new dnet_access_context(m_session.get_native_node()));
 		if (m_context) {
-			m_context->add({{"cmd", std::string(dnet_cmd_string(control.get_native().cmd))},
+			m_context->add({{"cmd", std::string(dnet_cmd_string(cmd.cmd))},
 			                {"id", std::string(dnet_dump_id_str(m_key.id().id))},
 			                {"access", "client"},
-			                {"cflags",  std::string(dnet_flags_dump_cflags(control.get_native().cflags))},
+			                {"cflags",  std::string(dnet_flags_dump_cflags(cmd.flags))},
 			                {"trace_id", to_hex_string(m_session.get_trace_id())},
 			               });
 		}
@@ -147,7 +150,7 @@ public:
 
 		async_lookup_result result{m_session};
 		auto handler = std::make_shared<inner_handler>(m_session, result, std::move(groups),
-		                                               control.get_native());
+		                                               std::move(request));
 		handler->set_total(m_handler.get_total());
 		handler->start();
 		result.connect(
@@ -191,14 +194,17 @@ async_lookup_result session::lookup(const key &id) {
 	DNET_SESSION_GET_GROUPS(async_lookup_result);
 	transform(id);
 
-	transport_control control;
-	control.set_key(id.id());
-	control.set_command(DNET_CMD_LOOKUP_NEW);
-	control.set_cflags(get_cflags() | DNET_FLAGS_NEED_ACK);
+	dnet_cmd cmd;
+	memset(&cmd, 0, sizeof(dnet_cmd));
+	cmd.id = id.id();
+	cmd.cmd = DNET_CMD_LOOKUP_NEW;
+	cmd.flags = get_cflags() | DNET_FLAGS_NEED_ACK;
+
+	n2_request request(cmd, ioremap::elliptics::n2::default_deadline());
 
 	async_lookup_result result(*this);
 	auto handler = std::make_shared<lookup_handler>(*this, result, id);
-	handler->start(std::move(groups), control.get_native());
+	handler->start(std::move(groups), std::move(request));
 	return result;
 }
 

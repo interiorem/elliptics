@@ -20,6 +20,7 @@ namespace ioremap { namespace elliptics { namespace native {
 class replier_base {
 public:
 	replier_base(dnet_net_state *st, const dnet_cmd &cmd);
+	virtual ~replier_base() = default;
 
 	int reply(const std::shared_ptr<n2_body> &msg, bool last);
 	int reply_error(int errc, bool last);

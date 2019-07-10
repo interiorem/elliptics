@@ -446,7 +446,7 @@ void dnet_trans_clean_list(struct list_head *head, int error)
 			t->complete(dnet_state_addr(t->st), &t->cmd, t->priv);
 		}
 		if (t->repliers) {
-			n2_reply_error(t->repliers, error);
+			n2_reply_error(t->repliers, t->cmd.status);
 		}
 
 		dnet_trans_put(t);
@@ -737,8 +737,10 @@ static int dnet_trans_convert_timed_out_to_responses(struct dnet_net_state *st, 
 
 		if (t->repliers) {
 			// Protocol-independent mechanic
+			t->cmd.status = -ETIMEDOUT;
+
 			r->io_req_type = DNET_IO_REQ_TYPED_RESPONSE;
-			r->response_info = n2_response_info_create_from_error(&t->cmd, t->repliers, -ETIMEDOUT);
+			r->response_info = n2_response_info_create_from_error(&t->cmd, t->repliers, t->cmd.status);
 		} else {
 			// Old mechanic. TODO: remove then refactoring complete
 			r->header = r + 1;
@@ -788,7 +790,6 @@ static int dnet_trans_check_stall(struct dnet_net_state *st, struct list_head *t
 
 static void dnet_trans_enqueue_responses_on_timed_out(struct dnet_node *n, struct list_head *timeout_responses) {
 	struct dnet_io_req *r, *tmp;
-
 	list_for_each_entry_safe(r, tmp, timeout_responses, req_entry) {
 		list_del_init(&r->req_entry);
 

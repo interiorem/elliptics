@@ -26,8 +26,9 @@ int protocol::send_request(dnet_net_state *st,
 		std::unique_ptr<dnet_trans, void (*)(dnet_trans *)>
 			t(dnet_trans_search(st, cmd.trans), &dnet_trans_put);
 
-		if (!t || !t->repliers)
+		if (!t || !t->repliers) {
 			return -EINVAL;
+		}
 
 		*t->repliers = std::move(repliers);
 	}
@@ -83,6 +84,10 @@ int protocol::recv_response(dnet_net_state *st, const dnet_cmd &cmd, data_pointe
 
 	n2_repliers &repliers = *t->repliers;
 	bool last = !(cmd.flags & DNET_FLAGS_MORE);
+
+	if (last) {
+		t->cmd = cmd;
+	}
 
 	if (cmd.status) {
 		return repliers.on_reply_error(cmd.status, last);

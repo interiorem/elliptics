@@ -199,7 +199,7 @@ bool async_result<T>::get(T &entry)
 {
 	wait(session::throw_at_get);
 	for (auto it = m_data->results.begin(); it != m_data->results.end(); ++it) {
-		if (it->status() == 0 && !it->data().empty()) {
+		if (it->is_valid() && it->status() == 0) {
 			entry = *it;
 			return true;
 		}

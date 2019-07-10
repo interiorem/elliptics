@@ -1,4 +1,6 @@
 #include "elliptics/newapi/result_entry.hpp"
+#include "bindings/cpp/callback_p.h"
+#include "library/n2_protocol.hpp"
 #include "library/protocol.hpp"
 #include "library/elliptics.h"
 
@@ -21,13 +23,41 @@ bool callback_result_entry::empty() const {
 }
 
 std::string lookup_result_entry::path() const {
-	dnet_lookup_response response;
+	if (tmp_is_n2_protocol()) {
+		auto &response = *static_cast<ioremap::elliptics::n2::lookup_response *>(body());
+		return response.path;
+	}
 
+	// fallback for using lookup_result_entry with session::write
+	dnet_lookup_response response;
 	deserialize(raw_data(), response);
 	return response.path;
 }
 
 dnet_record_info lookup_result_entry::record_info() const {
+	if (tmp_is_n2_protocol()) {
+		auto &response = *static_cast<ioremap::elliptics::n2::lookup_response *>(body());
+
+		dnet_record_info info;
+		memset(&info, 0, sizeof(info));
+
+		info.record_flags = response.record_flags;
+		info.user_flags = response.user_flags;
+
+		info.json_timestamp = response.json_timestamp;
+		info.json_offset = response.json_offset;
+		info.json_size = response.json_size;
+		info.json_capacity = response.json_capacity;
+
+		info.data_timestamp = response.data_timestamp;
+		info.data_offset = response.data_offset;
+		info.data_size = response.data_size;
+
+		return info;
+	}
+
+	// fallback for using lookup_result_entry with session::write
+
 	dnet_record_info info;
 	memset(&info, 0, sizeof(info));
 
@@ -61,16 +91,26 @@ lookup_result_entry::checksum_t convert_checksum(const std::vector<unsigned char
 }
 
 lookup_result_entry::checksum_t lookup_result_entry::json_checksum() const {
+	if (tmp_is_n2_protocol()) {
+		auto &response = *static_cast<ioremap::elliptics::n2::lookup_response *>(body());
+		return convert_checksum(response.json_checksum);
+	}
+
+	// fallback for using lookup_result_entry with session::write
 	dnet_lookup_response response;
 	deserialize(raw_data(), response);
-
 	return convert_checksum(response.json_checksum);
 }
 
 lookup_result_entry::checksum_t lookup_result_entry::data_checksum() const {
+	if (tmp_is_n2_protocol()) {
+		auto &response = *static_cast<ioremap::elliptics::n2::lookup_response *>(body());
+		return convert_checksum(response.data_checksum);
+	}
+
+	// fallback for using lookup_result_entry with session::write
 	dnet_lookup_response response;
 	deserialize(raw_data(), response);
-
 	return convert_checksum(response.data_checksum);
 }
 

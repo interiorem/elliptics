@@ -1440,9 +1440,10 @@ dnet_cmd n2_convert_to_response_cmd(dnet_cmd cmd) {
 }
 
 n2_repliers n2_make_repliers_via_request_queue(dnet_net_state *st, const dnet_cmd &cmd, n2_repliers repliers) {
-	auto enqueue_response = [st, cmd = n2_convert_to_response_cmd(cmd)](std::function<int ()> response_holder) {
+	auto enqueue_response = [st, cmd = n2_convert_to_response_cmd(cmd)](std::function<int ()> response_holder, int status) {
 		std::unique_ptr<n2_response_info>
 			response_info(new n2_response_info{ cmd, std::move(response_holder) });
+		response_info->cmd.status = status;
 
 		auto r = static_cast<dnet_io_req *>(calloc(1, sizeof(dnet_io_req)));
 		if (!r)
@@ -1461,23 +1462,23 @@ n2_repliers n2_make_repliers_via_request_queue(dnet_net_state *st, const dnet_cm
 
 	repliers_wrappers.on_reply_error = [on_reply_error = std::move(repliers.on_reply_error),
                                             enqueue_response](int errc, bool last) -> int {
-		return enqueue_response(std::bind(on_reply_error, errc, last));
+		return enqueue_response(std::bind(on_reply_error, errc, last), errc);
 	};
 
 	repliers_wrappers.on_reply = [on_reply = std::move(repliers.on_reply),
 	                              enqueue_response](const std::shared_ptr<n2_body> &msg, bool last) -> int {
-		return enqueue_response(std::bind(on_reply, msg, last));
+		return enqueue_response(std::bind(on_reply, msg, last), 0);
 	};
 
 	return repliers_wrappers;
 }
 
-int n2_complete_trans_via_response_holder(dnet_trans *t, n2_response_info *response_info) {
-	return c_exception_guard(response_info->response_holder, t->st->n, __FUNCTION__);
+int n2_complete_trans_via_response_holder(dnet_node *n, n2_response_info *response_info) {
+	return c_exception_guard(response_info->response_holder, n, __FUNCTION__);
 }
 
 // TODO(sabramkin): Try rework to n2_trans_alloc_send. In new mechanic we don't need to separate alloc and send
-static int n2_trans_send(dnet_trans *t, n2_request_info *request_info) {
+int n2_trans_send(dnet_trans *t, n2_request_info *request_info) {
 	using namespace ioremap::elliptics;
 
 	struct dnet_net_state *st = t->st;
@@ -1489,6 +1490,15 @@ static int n2_trans_send(dnet_trans *t, n2_request_info *request_info) {
 	BOOST_SCOPE_EXIT(&t) {
 		dnet_trans_put(t);
 	} BOOST_SCOPE_EXIT_END
+
+	auto repliers_wrappers = n2_make_repliers_via_request_queue(st,
+	                                                            request_info->request.cmd,
+	                                                            std::move(request_info->repliers));
+	// TODO(sabramkin): It's temporary solution, while transactions are managed outer of protocol.
+	// We cannot insert transaction to st->trans_root tree when transaction's repliers aren't set. So we must assign
+	// repliers here, not only relying on protocol::send_request. After refactoring is finished, repliers will be
+	// passed only to protocol::send_request.
+	*t->repliers = repliers_wrappers;
 
 	pthread_mutex_lock(&st->trans_lock);
 	err = dnet_trans_insert_nolock(st, t);
@@ -1503,10 +1513,6 @@ static int n2_trans_send(dnet_trans *t, n2_request_info *request_info) {
 	if (t->n->test_settings && !dnet_node_get_test_settings(t->n, &test_settings) &&
 	    test_settings.commands_mask & (1 << t->command))
 		return err;
-
-	auto repliers_wrappers = n2_make_repliers_via_request_queue(st,
-	                                                            request_info->request.cmd,
-	                                                            std::move(request_info->repliers));
 
 	n2::net_state_get_protocol(st)->send_request(st,
 	                                             std::move(request_info->request),

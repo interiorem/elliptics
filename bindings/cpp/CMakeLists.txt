@@ -39,6 +39,7 @@ set(ELLIPTICS_CLIENT_SRCS
     ../../library/request_queue.cpp
     ../../library/rbtree.c
     ../../library/trans.c
+    ../../library/trans.cpp
     ../../library/tests.c
     ../../library/common.cpp
     ../../library/access_context.cpp
