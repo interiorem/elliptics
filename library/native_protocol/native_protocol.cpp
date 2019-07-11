@@ -21,10 +21,9 @@ int protocol::send_request(dnet_net_state *st,
 		// we shouldn't search it here
 
 		pthread_mutex_lock(&st->trans_lock);
-		std::unique_ptr<pthread_mutex_t, int (*)(pthread_mutex_t *)>
-			trans_guard(&st->trans_lock, &pthread_mutex_unlock);
 		std::unique_ptr<dnet_trans, void (*)(dnet_trans *)>
 			t(dnet_trans_search(st, cmd.trans), &dnet_trans_put);
+		pthread_mutex_unlock(&st->trans_lock);
 
 		if (!t || !t->repliers)
 			return -EINVAL;
