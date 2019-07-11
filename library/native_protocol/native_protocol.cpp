@@ -13,23 +13,13 @@ using namespace ioremap::elliptics::n2;
 
 int protocol::send_request(dnet_net_state *st,
                            const n2_request &request,
-                           n2_repliers &&repliers) {
+                           n2_repliers &&/*repliers*/) {
+	// TODO(sabramkin): Note about temporary solution, while transactions are managed outer of protocol.
+	// Currently transaction is created outside from protocol. Repliers is the main part of transaction, so they're
+	// assigned to transaction before it became a part of trans-tree. But when we'll create transaction in protocol,
+	// we MUST consume repliers (and assign them to transaction) in current method.
+
 	const dnet_cmd &cmd = request.cmd;
-
-	{
-		// Note: currently transaction is created outside from protocol. When we'll create it in protocol,
-		// we shouldn't search it here
-
-		pthread_mutex_lock(&st->trans_lock);
-		std::unique_ptr<dnet_trans, void (*)(dnet_trans *)>
-			t(dnet_trans_search(st, cmd.trans), &dnet_trans_put);
-		pthread_mutex_unlock(&st->trans_lock);
-
-		if (!t || !t->repliers)
-			return -EINVAL;
-
-		*t->repliers = std::move(repliers);
-	}
 
 	n2_serialized::chunks_t chunks;
 

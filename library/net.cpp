@@ -1490,6 +1490,15 @@ static int n2_trans_send(dnet_trans *t, n2_request_info *request_info) {
 		dnet_trans_put(t);
 	} BOOST_SCOPE_EXIT_END
 
+	auto repliers_wrappers = n2_make_repliers_via_request_queue(st,
+	                                                            request_info->request.cmd,
+	                                                            std::move(request_info->repliers));
+	// TODO(sabramkin): It's temporary solution, while transactions are managed outer of protocol.
+	// We cannot insert transaction to st->trans_root tree when transaction's repliers aren't set. So we must assign
+	// repliers here, not only relying on protocol::send_request. After refactoring is finished, repliers will be
+	// passed only to protocol::send_request.
+	*t->repliers = repliers_wrappers;
+
 	pthread_mutex_lock(&st->trans_lock);
 	err = dnet_trans_insert_nolock(st, t);
 	if (!err) {
@@ -1503,10 +1512,6 @@ static int n2_trans_send(dnet_trans *t, n2_request_info *request_info) {
 	if (t->n->test_settings && !dnet_node_get_test_settings(t->n, &test_settings) &&
 	    test_settings.commands_mask & (1 << t->command))
 		return err;
-
-	auto repliers_wrappers = n2_make_repliers_via_request_queue(st,
-	                                                            request_info->request.cmd,
-	                                                            std::move(request_info->repliers));
 
 	n2::net_state_get_protocol(st)->send_request(st,
 	                                             std::move(request_info->request),
