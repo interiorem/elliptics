@@ -162,8 +162,10 @@ bool n2_native_protocol_is_supported_message(struct dnet_net_state *st) {
 	// Replies addressed to client are currently passed via old mechanic. This condition branch will be removed
 	// after client supports new mechanic for DNET_CMD_LOOKUP_NEW command.
 	if (cmd->flags & DNET_FLAGS_REPLY) {
+		pthread_mutex_lock(&st->trans_lock);
 		std::unique_ptr<dnet_trans, void (*)(dnet_trans *)>
 		        t(dnet_trans_search(st, cmd->trans), &dnet_trans_put);
+		pthread_mutex_unlock(&st->trans_lock);
 
 		if (t && !t->repliers)
 			return false;
