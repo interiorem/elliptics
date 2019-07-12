@@ -1,3 +1,9 @@
+elliptics (2.27.10.8) unstable; urgency=low
+
+  * fix: skip not found transactions in client
+
+ -- Artem Selishchev <arselishev@gmail.com>  Fri, 12 Jul 2019 15:24:52 +0300
+
 elliptics (2.27.10.7) unstable; urgency=low
 
   * fix: don't insert into trans_tree transaction without repliers
