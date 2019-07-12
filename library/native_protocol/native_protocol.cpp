@@ -66,7 +66,12 @@ int protocol::recv_response(dnet_net_state *st, const dnet_cmd &cmd, data_pointe
 		t(dnet_trans_search(st, cmd.trans), &dnet_trans_put);
 	pthread_mutex_unlock(&st->trans_lock);
 
-	if (!t || !t->repliers) {
+	if (!t) {
+		DNET_LOG_ERROR(st->n, "{}: could not find transaction for reply: trans {}",
+		               dnet_dump_id(&cmd.id), cmd.trans);
+		return 0;
+	}
+	if (!t->repliers) {
 		return -EINVAL;
 	}
 
