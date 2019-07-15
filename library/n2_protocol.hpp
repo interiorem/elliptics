@@ -1,7 +1,5 @@
 #pragma once
 
-#include <boost/variant.hpp>
-
 #include "elliptics/interface.h"
 #include "elliptics/utils.hpp"
 
@@ -155,15 +153,29 @@ struct file_pointer {
 	uint64_t size = 0;
 	int on_exit = 0;
 
+	file_pointer() = default;
+
 	file_pointer(int fd,
 	             uint64_t offset,
 	             uint64_t size,
 	             int on_exit);
 };
 
-using chunk_t = boost::variant<data_pointer, file_pointer>;
+struct chunk_t {
+	enum class source_type {
+		memory, // data source is data_pointer
+		file,   // data source is file_pointer
+	};
 
-size_t chunk_size(const chunk_t& chunk);
+	source_type type;
+	data_pointer data;
+	file_pointer file;
+
+	explicit chunk_t(const data_pointer &data);
+	explicit chunk_t(const file_pointer &file);
+
+	size_t size() const;
+};
 
 // TODO(artsel): place here read_request and read_response
 

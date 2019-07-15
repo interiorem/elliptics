@@ -44,7 +44,6 @@
 #include "elliptics.h"
 #include "elliptics/interface.h"
 #include "elliptics/packet.h"
-#include "lambda_visitor.hpp"
 #include "logger.hpp"
 #include "n2_protocol.hpp"
 #include "native_protocol/serialize.hpp"
@@ -1601,15 +1600,18 @@ static int n2_send_cmd(dnet_net_state *st, dnet_cmd *cmd) {
 static int n2_send_chunk(dnet_net_state *st, const ioremap::elliptics::n2::chunk_t &chunk, uint64_t offset) {
 	using namespace ioremap::elliptics;
 
-	auto visitor = make_lambda_visitor<int>(
-		[st, offset](const data_pointer &dp) -> ssize_t {
-			auto dp_left = dp.skip(offset);
-			return dnet_send_nolock(st, dp_left.data(), dp_left.size());
-		},
-		[st, offset](const n2::file_pointer &fp) -> ssize_t {
-			return dnet_send_fd_nolock(st, fp.fd, fp.offset + offset, fp.size - offset);
-		});
-	return boost::apply_visitor(visitor, chunk);
+	switch (chunk.type) {
+	case n2::chunk_t::source_type::memory: {
+		auto dp_left = chunk.data.skip(offset);
+		return dnet_send_nolock(st, dp_left.data(), dp_left.size());
+	}
+	case n2::chunk_t::source_type::file: {
+		const auto &fp = chunk.file;
+		return dnet_send_fd_nolock(st, fp.fd, fp.offset + offset, fp.size - offset);
+	}
+	default:
+		return -EINVAL;
+	}
 }
 
 static int n2_send_request_impl(dnet_net_state *st, dnet_io_req *r) {
@@ -1653,7 +1655,7 @@ static int n2_send_request_impl(dnet_net_state *st, dnet_io_req *r) {
 			size_t current_block_offset = sizeof(dnet_cmd);
 
 			for (const auto &chunk : serialized.chunks) {
-				size_t current_block_end_offset = current_block_offset + n2::chunk_size(chunk);
+				size_t current_block_end_offset = current_block_offset + chunk.size();
 				if (st->send_offset < current_block_end_offset) /*block hasn't sent*/ {
 					send_error = n2_send_chunk(st, chunk, st->send_offset - current_block_offset);
 					if (send_error) {

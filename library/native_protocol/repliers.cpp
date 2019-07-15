@@ -3,10 +3,9 @@
 #include <blackhole/attribute.hpp>
 #include <msgpack.hpp>
 
+#include "serialize.hpp"
 #include "library/common.hpp"
 #include "library/elliptics.h"
-#include "library/lambda_visitor.hpp"
-#include "serialize.hpp"
 
 namespace ioremap { namespace elliptics { namespace native {
 
@@ -41,7 +40,7 @@ int replier_base::reply_error(int errc, bool last) {
 static size_t calculate_body_size(const n2_serialized::chunks_t &chunks) {
 	size_t size = 0;
 	for (const auto &chunk : chunks) {
-		size += chunk_size(chunk);
+		size += chunk.size();
 	}
 	return size;
 }
