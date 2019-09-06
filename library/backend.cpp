@@ -34,7 +34,7 @@ public:
 	// fill @value with all shared io pools' statistics
 	void statistics(rapidjson::Value &value, rapidjson::Document::AllocatorType &allocator);
 	// add to @queue_size and @threads_count all shared io pools' queues' sizes and number of threads.
-	void check(uint64_t &queue_size, uint64_t threads_count);
+	void check(uint64_t &queue_size, uint64_t &threads_count);
 
 private:
 	struct dnet_node							*m_node;
@@ -154,7 +154,7 @@ void dnet_io_pools_manager::statistics(rapidjson::Value &value, rapidjson::Docum
 	}
 }
 
-void dnet_io_pools_manager::check(uint64_t &queue_size, uint64_t threads_count) {
+void dnet_io_pools_manager::check(uint64_t &queue_size, uint64_t &threads_count) {
 	boost::shared_lock<boost::shared_mutex> guard(m_pools_mutex);
 	for (auto &item : m_pools) {
 		const auto &io_pool = item.second;
